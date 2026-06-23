@@ -1,0 +1,39 @@
+name: Live MCP Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,37 * * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Check live smoke configuration
+        id: config
+        env:
+          BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
+          API_KEY: ${{ secrets.AXIOM_API_KEY }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$API_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Live MCP smoke skipped: set AXIOM_API_BASE_URL repo variable and AXIOM_API_KEY secret."
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke live MCP adapter
+        if: steps.config.outputs.configured == 'true'
+        env:
+          AXIOM_API_BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
+          AXIOM_API_KEY: ${{ secrets.AXIOM_API_KEY }}
+        run: npm run smoke:live

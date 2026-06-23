@@ -46,3 +46,11 @@ URL with the configured API key.
 ```sh
 npm run check
 ```
+
+Live smoke against the deployed API:
+
+```sh
+AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
+AXIOM_API_KEY=... \
+npm run smoke:live
+```
