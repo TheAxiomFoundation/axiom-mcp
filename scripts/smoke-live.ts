@@ -76,6 +76,22 @@ try {
   if (!paritySummary || paritySummary.matching !== paritySummary.total) {
     throw new Error("run_parity_cases did not return all matching cases");
   }
+  const parityResults = readPath<unknown[]>(parity.structuredContent, [
+    "data",
+    "results"
+  ]);
+  const coSnapParity = parityResults?.find(
+    (result) =>
+      readField(result, "id") === "co-snap-us-co-family-1"
+  );
+  const traceOutputs = readField(coSnapParity, "trace_outputs");
+  if (
+    typeof traceOutputs !== "object" ||
+    traceOutputs === null ||
+    readField(traceOutputs, "gross_income") !== 1200
+  ) {
+    throw new Error("run_parity_cases did not include CO SNAP trace outputs");
+  }
 
   console.log(`Live MCP smoke passed for ${baseUrl}`);
 } finally {
