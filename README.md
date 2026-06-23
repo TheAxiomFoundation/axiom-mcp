@@ -21,6 +21,8 @@ npm run mcp
 - `get_rule_dependencies`
 - `list_runtime_packages`
 - `get_runtime_package`
+- `list_parity_cases`
+- `run_parity_cases`
 - `calculate_household`
 
 ## Resources
@@ -28,6 +30,7 @@ npm run mcp
 - `axiom://capabilities`
 - `axiom://programs`
 - `axiom://runtime/packages`
+- `axiom://parity/cases`
 
 ## Prompts
 
