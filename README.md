@@ -23,6 +23,18 @@ npm run mcp
 - `get_runtime_package`
 - `calculate_household`
 
+## Resources
+
+- `axiom://capabilities`
+- `axiom://programs`
+- `axiom://runtime/packages`
+
+## Prompts
+
+- `explain_rule_for_caseworker`
+- `trace_household_result`
+- `find_missing_household_inputs`
+
 ## Security
 
 The server does not expose shell execution, arbitrary network fetch, database

@@ -40,6 +40,10 @@ export class AxiomApiClient {
     return this.request("POST", "/v1/search", input);
   }
 
+  listPrograms() {
+    return this.request("GET", "/v1/programs");
+  }
+
   getRule(ruleId: string) {
     return this.request("GET", `/v1/rules/${encodeRuleId(ruleId)}`);
   }

@@ -9,6 +9,20 @@ describe("Axiom MCP server protocol", () => {
     const apiClient = new AxiomApiClient({
       baseUrl: "https://api.example.test",
       fetchImpl: async (url, init) => {
+        if (String(url).endsWith("/v1/capabilities")) {
+          return Response.json({
+            status: "ok",
+            data: { runtime: { package_count: 2 } },
+            meta: {}
+          });
+        }
+        if (String(url).endsWith("/v1/programs")) {
+          return Response.json({
+            status: "ok",
+            data: { programs: [{ id: "co-snap" }] },
+            meta: {}
+          });
+        }
         if (String(url).endsWith("/v1/search")) {
           return Response.json({
             status: "ok",
@@ -64,6 +78,40 @@ describe("Axiom MCP server protocol", () => {
             }
           ]
         }
+      });
+
+      const resources = await client.listResources();
+      expect(resources.resources.map((resource) => resource.uri)).toEqual(
+        expect.arrayContaining([
+          "axiom://capabilities",
+          "axiom://programs",
+          "axiom://runtime/packages"
+        ])
+      );
+
+      const capabilities = await client.readResource({
+        uri: "axiom://capabilities"
+      });
+      expect(JSON.parse(capabilities.contents[0]?.text ?? "{}")).toMatchObject({
+        data: { runtime: { package_count: 2 } }
+      });
+
+      const prompts = await client.listPrompts();
+      expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(
+        expect.arrayContaining([
+          "explain_rule_for_caseworker",
+          "trace_household_result",
+          "find_missing_household_inputs"
+        ])
+      );
+
+      const prompt = await client.getPrompt({
+        name: "trace_household_result",
+        arguments: { program_id: "co-snap", jurisdiction: "us-co" }
+      });
+      expect(prompt.messages[0]?.content).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("us-co/co-snap")
       });
     } finally {
       await client.close();
