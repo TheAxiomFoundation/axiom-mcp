@@ -25,6 +25,11 @@ npm run mcp
 - `run_parity_cases`
 - `calculate_household`
 
+`run_parity_cases` returns the Axiom API parity summary, expected-output
+diffs, `trace_outputs`, calculation trace rows, and case notes when the API
+provides them. Use it for migration checks and to explain why a result differs
+from another engine.
+
 ## Resources
 
 - `axiom://capabilities`

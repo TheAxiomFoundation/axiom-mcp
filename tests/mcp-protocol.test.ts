@@ -43,7 +43,26 @@ describe("Axiom MCP server protocol", () => {
             status: "ok",
             data: {
               summary: { total: 1, matching: 1, different: 0, errored: 0 },
-              results: [{ id: "co-snap-us-co-family-1", status: "matching" }]
+              results: [
+                {
+                  id: "co-snap-us-co-family-1",
+                  status: "matching",
+                  trace_outputs: {
+                    gross_income: 1200,
+                    snap_standard_deduction: 209,
+                    excess_shelter_deduction: 524.5
+                  },
+                  calculation_trace: [
+                    {
+                      rule_id: "gross_income",
+                      variable: "gross_income",
+                      value: 1200,
+                      sources: ["axiom:test#gross_income"]
+                    }
+                  ],
+                  notes: ["Canonical values are monthly."]
+                }
+              ]
             },
             meta: { request_id: "req-parity" }
           });
@@ -52,7 +71,14 @@ describe("Axiom MCP server protocol", () => {
           return Response.json({
             status: "ok",
             data: {
-              cases: [{ id: "co-snap-us-co-family-1", program_id: "co-snap" }]
+              cases: [
+                {
+                  id: "co-snap-us-co-family-1",
+                  program_id: "co-snap",
+                  trace_variables: ["gross_income", "snap_standard_deduction"],
+                  notes: ["Canonical values are monthly."]
+                }
+              ]
             },
             meta: { request_id: "req-parity-cases" }
           });
@@ -122,7 +148,17 @@ describe("Axiom MCP server protocol", () => {
       expect(parity.structuredContent).toMatchObject({
         status: "ok",
         data: {
-          summary: { total: 1, matching: 1 }
+          summary: { total: 1, matching: 1 },
+          results: [
+            expect.objectContaining({
+              trace_outputs: {
+                gross_income: 1200,
+                snap_standard_deduction: 209,
+                excess_shelter_deduction: 524.5
+              },
+              notes: ["Canonical values are monthly."]
+            })
+          ]
         }
       });
 
