@@ -61,6 +61,18 @@ export async function getRuntimePackage(
   );
 }
 
+export async function listParityCases(
+  context: AxiomToolContext
+): Promise<ToolResult> {
+  return asToolResult(await context.client.listParityCases());
+}
+
+export async function runParityCases(
+  context: AxiomToolContext
+): Promise<ToolResult> {
+  return asToolResult(await context.client.runParityCases());
+}
+
 export async function calculateHousehold(
   context: AxiomToolContext,
   input: {

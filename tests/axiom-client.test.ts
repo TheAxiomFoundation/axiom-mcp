@@ -69,4 +69,29 @@ describe("AxiomApiClient", () => {
       }
     } satisfies Partial<AxiomApiError>);
   });
+
+  it("calls parity endpoints", async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return Response.json({ status: "ok", data: {} });
+      }
+    });
+
+    await client.listParityCases();
+    await client.runParityCases();
+
+    expect(calls).toEqual([
+      {
+        url: "https://api.example.test/v1/parity/cases",
+        method: "GET"
+      },
+      {
+        url: "https://api.example.test/v1/parity/run",
+        method: "POST"
+      }
+    ]);
+  });
 });

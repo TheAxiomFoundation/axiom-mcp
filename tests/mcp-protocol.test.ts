@@ -38,6 +38,25 @@ describe("Axiom MCP server protocol", () => {
             meta: { request_id: "req-test" }
           });
         }
+        if (String(url).endsWith("/v1/parity/run")) {
+          return Response.json({
+            status: "ok",
+            data: {
+              summary: { total: 1, matching: 1, different: 0, errored: 0 },
+              results: [{ id: "co-snap-us-co-family-1", status: "matching" }]
+            },
+            meta: { request_id: "req-parity" }
+          });
+        }
+        if (String(url).endsWith("/v1/parity/cases")) {
+          return Response.json({
+            status: "ok",
+            data: {
+              cases: [{ id: "co-snap-us-co-family-1", program_id: "co-snap" }]
+            },
+            meta: { request_id: "req-parity-cases" }
+          });
+        }
         return Response.json({ status: "ok", data: {}, meta: {} });
       }
     });
@@ -60,6 +79,8 @@ describe("Axiom MCP server protocol", () => {
           "get_rule_dependencies",
           "list_runtime_packages",
           "get_runtime_package",
+          "list_parity_cases",
+          "run_parity_cases",
           "calculate_household"
         ])
       );
@@ -85,7 +106,8 @@ describe("Axiom MCP server protocol", () => {
         expect.arrayContaining([
           "axiom://capabilities",
           "axiom://programs",
-          "axiom://runtime/packages"
+          "axiom://runtime/packages",
+          "axiom://parity/cases"
         ])
       );
 
@@ -94,6 +116,14 @@ describe("Axiom MCP server protocol", () => {
       });
       expect(JSON.parse(capabilities.contents[0]?.text ?? "{}")).toMatchObject({
         data: { runtime: { package_count: 2 } }
+      });
+
+      const parity = await client.callTool({ name: "run_parity_cases" });
+      expect(parity.structuredContent).toMatchObject({
+        status: "ok",
+        data: {
+          summary: { total: 1, matching: 1 }
+        }
       });
 
       const prompts = await client.listPrompts();

@@ -24,6 +24,11 @@ try {
     "search_rules",
     "tools"
   );
+  assertIncludes(
+    tools.tools.map((tool) => tool.name),
+    "run_parity_cases",
+    "tools"
+  );
 
   const capabilities = await client.callTool({ name: "get_capabilities" });
   const packages = readPath<unknown[]>(capabilities.structuredContent, [
@@ -61,6 +66,15 @@ try {
     !outputs.some((output) => readField(output, "name") === "snap_benefit_amount")
   ) {
     throw new Error("get_runtime_package did not include snap_benefit_amount");
+  }
+
+  const parity = await client.callTool({ name: "run_parity_cases" });
+  const paritySummary = readPath<Record<string, unknown>>(parity.structuredContent, [
+    "data",
+    "summary"
+  ]);
+  if (!paritySummary || paritySummary.matching !== paritySummary.total) {
+    throw new Error("run_parity_cases did not return all matching cases");
   }
 
   console.log(`Live MCP smoke passed for ${baseUrl}`);

@@ -67,6 +67,14 @@ export class AxiomApiClient {
     );
   }
 
+  listParityCases() {
+    return this.request("GET", "/v1/parity/cases");
+  }
+
+  runParityCases() {
+    return this.request("POST", "/v1/parity/run");
+  }
+
   calculateHousehold(input: {
     program_id: string;
     jurisdiction: string;

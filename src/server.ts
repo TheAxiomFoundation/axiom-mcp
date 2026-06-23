@@ -8,7 +8,9 @@ import {
   getRuleDependencies,
   getRuleSources,
   getRuntimePackage,
+  listParityCases,
   listRuntimePackages,
+  runParityCases,
   searchRules
 } from "./tool-handlers.js";
 
@@ -51,6 +53,18 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
       mimeType: "application/json"
     },
     async (uri) => jsonResource(uri.href, await client.listRuntimePackages())
+  );
+
+  server.registerResource(
+    "axiom-parity-cases",
+    "axiom://parity/cases",
+    {
+      title: "Axiom parity cases",
+      description:
+        "Canonical runtime parity cases and expected outputs from the configured Axiom API.",
+      mimeType: "application/json"
+    },
+    async (uri) => jsonResource(uri.href, await client.listParityCases())
   );
 
   server.registerTool(
@@ -138,6 +152,26 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
       }
     },
     async (input) => getRuntimePackage(context, input)
+  );
+
+  server.registerTool(
+    "list_parity_cases",
+    {
+      title: "List parity cases",
+      description:
+        "List canonical Axiom runtime parity cases, expected outputs, and calculation requests."
+    },
+    async () => listParityCases(context)
+  );
+
+  server.registerTool(
+    "run_parity_cases",
+    {
+      title: "Run parity cases",
+      description:
+        "Run canonical Axiom runtime parity cases against the active API runtime and return variable-level differences."
+    },
+    async () => runParityCases(context)
   );
 
   server.registerTool(

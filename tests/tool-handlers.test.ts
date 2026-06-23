@@ -4,6 +4,8 @@ import {
   calculateHousehold,
   getCapabilities,
   getRuntimePackage,
+  listParityCases,
+  runParityCases,
   searchRules
 } from "../src/tool-handlers.js";
 
@@ -66,6 +68,25 @@ describe("tool handlers", () => {
           variables: ["snap_benefit_amount"]
         }
       }
+    ]);
+  });
+
+  it("forwards parity tools to the API client", async () => {
+    const calls: string[] = [];
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        return Response.json({ status: "ok", data: {} });
+      }
+    });
+
+    await listParityCases({ client });
+    await runParityCases({ client });
+
+    expect(calls).toEqual([
+      "https://api.example.test/v1/parity/cases",
+      "https://api.example.test/v1/parity/run"
     ]);
   });
 });
