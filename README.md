@@ -130,3 +130,21 @@ AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
 AXIOM_API_KEY=... \
 npm run smoke:live
 ```
+
+## Publishing
+
+The package is prepared for npm publication as `@axiom-foundation/mcp`, but the
+first publish requires npm credentials. Configure the GitHub Actions secret
+`NPM_TOKEN`, then run the manual `Publish MCP Package` workflow from:
+
+```txt
+https://github.com/TheAxiomFoundation/axiom-mcp/actions
+```
+
+The publish workflow runs `npm run check`, `npm pack --dry-run`, and
+`npm publish --access public --provenance`. After publication, MCP clients can
+install with:
+
+```sh
+npx -y @axiom-foundation/mcp
+```
