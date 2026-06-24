@@ -76,7 +76,20 @@ describe("Axiom MCP server protocol", () => {
                   id: "co-snap-us-co-family-1",
                   program_id: "co-snap",
                   trace_variables: ["gross_income", "snap_standard_deduction"],
-                  notes: ["Canonical values are monthly."]
+                  notes: ["Canonical values are monthly."],
+                  external_comparisons: [
+                    {
+                      id: "co-snap-policyengine-current",
+                      engine: "policyengine",
+                      mappings: [
+                        {
+                          axiom_variable: "snap_benefit_amount",
+                          external_path: "result.spm_units.spm_unit.snap.2026",
+                          transform: "annual_to_monthly"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             },
@@ -157,6 +170,23 @@ describe("Axiom MCP server protocol", () => {
                 excess_shelter_deduction: 524.5
               },
               notes: ["Canonical values are monthly."]
+            })
+          ]
+        }
+      });
+
+      const parityCases = await client.callTool({ name: "list_parity_cases" });
+      expect(parityCases.structuredContent).toMatchObject({
+        status: "ok",
+        data: {
+          cases: [
+            expect.objectContaining({
+              external_comparisons: [
+                expect.objectContaining({
+                  id: "co-snap-policyengine-current",
+                  engine: "policyengine"
+                })
+              ]
             })
           ]
         }

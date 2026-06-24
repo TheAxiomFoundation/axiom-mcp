@@ -93,6 +93,28 @@ try {
     throw new Error("run_parity_cases did not include CO SNAP trace outputs");
   }
 
+  const parityCases = await client.callTool({ name: "list_parity_cases" });
+  const cases = readPath<unknown[]>(parityCases.structuredContent, [
+    "data",
+    "cases"
+  ]);
+  const coSnapCase = cases?.find(
+    (candidate) => readField(candidate, "id") === "co-snap-us-co-family-1"
+  );
+  const comparisons = readField(coSnapCase, "external_comparisons");
+  if (
+    !Array.isArray(comparisons) ||
+    !comparisons.some(
+      (comparison) =>
+        readField(comparison, "id") === "co-snap-policyengine-current" &&
+        readField(comparison, "engine") === "policyengine"
+    )
+  ) {
+    throw new Error(
+      "list_parity_cases did not include CO SNAP PolicyEngine comparison metadata"
+    );
+  }
+
   console.log(`Live MCP smoke passed for ${baseUrl}`);
 } finally {
   await client.close();
