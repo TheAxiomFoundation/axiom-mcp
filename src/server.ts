@@ -61,7 +61,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "Axiom parity cases",
       description:
-        "Canonical runtime parity cases, expected outputs, trace variables, and notes from the configured Axiom API.",
+        "Canonical runtime parity cases, expected outputs, trace variables, notes, and external comparison metadata from the configured Axiom API.",
       mimeType: "application/json"
     },
     async (uri) => jsonResource(uri.href, await client.listParityCases())
@@ -159,7 +159,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "List parity cases",
       description:
-        "List canonical Axiom runtime parity cases, expected outputs, trace variables, notes, and calculation requests."
+        "List canonical Axiom runtime parity cases, expected outputs, trace variables, notes, external comparison metadata, and calculation requests."
     },
     async () => listParityCases(context)
   );

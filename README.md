@@ -25,6 +25,11 @@ npm run mcp
 - `run_parity_cases`
 - `calculate_household`
 
+`list_parity_cases` returns canonical Axiom requests plus optional
+`external_comparisons` metadata for engines such as PolicyEngine. Those
+comparisons include the external request, output mappings, trace mappings,
+notes, and tolerances owned by the Axiom API fixture.
+
 `run_parity_cases` returns the Axiom API parity summary, expected-output
 diffs, `trace_outputs`, calculation trace rows, and case notes when the API
 provides them. Use it for migration checks and to explain why a result differs
