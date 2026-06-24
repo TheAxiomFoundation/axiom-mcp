@@ -1,18 +1,28 @@
 {
   "name": "@axiom-foundation/mcp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "MCP server adapter for the Axiom Rule API.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheAxiomFoundation/axiom-mcp.git"
+  },
+  "homepage": "https://github.com/TheAxiomFoundation/axiom-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/TheAxiomFoundation/axiom-mcp/issues"
+  },
   "bin": {
     "axiom-mcp": "dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "test": "vitest run",
     "mcp": "tsx src/index.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",

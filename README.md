@@ -6,10 +6,55 @@ and calculation execution go through the HTTP API.
 
 ## Run
 
+From a checkout:
+
 ```sh
 AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
 AXIOM_API_KEY=... \
 npm run mcp
+```
+
+After installation:
+
+```sh
+AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
+AXIOM_API_KEY=... \
+axiom-mcp
+```
+
+Claude Desktop example:
+
+```json
+{
+  "mcpServers": {
+    "axiom": {
+      "command": "npx",
+      "args": ["-y", "@axiom-foundation/mcp"],
+      "env": {
+        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_KEY": "axiom_..."
+      }
+    }
+  }
+}
+```
+
+For local development before the package is published, point the client at the
+checkout:
+
+```json
+{
+  "mcpServers": {
+    "axiom-local": {
+      "command": "node",
+      "args": ["/path/to/axiom-mcp/dist/index.js"],
+      "env": {
+        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_KEY": "axiom_..."
+      }
+    }
+  }
+}
 ```
 
 ## Tools
@@ -54,10 +99,28 @@ The server does not expose shell execution, arbitrary network fetch, database
 access, or write/admin operations. It only calls the configured Axiom API base
 URL with the configured API key.
 
+Recommended API key scopes:
+
+```txt
+rules:read      get_capabilities, search_rules, get_rule, list_runtime_packages, get_runtime_package
+sources:read    get_rule_sources
+graphs:read     get_rule_dependencies
+calculate:run   calculate_household
+admin:parity    list_parity_cases, run_parity_cases
+```
+
+Use the narrowest key that matches the agent workflow. A read-only research
+agent usually needs `rules:read`, `sources:read`, and `graphs:read`; a scenario
+runner also needs `calculate:run`.
+
+If the Axiom API returns `429 rate_limited`, the MCP client should retry after
+the response's `retry-after` interval.
+
 ## Development
 
 ```sh
 npm run check
+npm pack --dry-run
 ```
 
 Live smoke against the deployed API:
