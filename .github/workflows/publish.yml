@@ -23,12 +23,5 @@ jobs:
       - run: npm run check
       - run: npm pack --dry-run
 
-      - name: Check npm publish configuration
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: test -n "$NODE_AUTH_TOKEN"
-
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
