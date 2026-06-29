@@ -133,17 +133,31 @@ npm run smoke:live
 
 ## Publishing
 
-The package is prepared for npm publication as `@axiom-foundation/mcp`, but the
-first publish requires npm credentials. Configure the GitHub Actions secret
-`NPM_TOKEN`, then run the manual `Publish MCP Package` workflow from:
+The package is prepared for npm publication as `@axiom-foundation/mcp`.
+
+Use npm Trusted Publishing for CI/CD releases instead of a long-lived npm token.
+Configure the package's trusted publisher in npm with:
+
+- package: `@axiom-foundation/mcp`
+- repository owner: `TheAxiomFoundation`
+- repository name: `axiom-mcp`
+- workflow filename: `publish.yml`
+- environment: leave blank unless the workflow is later moved behind a GitHub
+  environment
+
+Then run the manual `Publish MCP Package` workflow from:
 
 ```txt
 https://github.com/TheAxiomFoundation/axiom-mcp/actions
 ```
 
 The publish workflow runs `npm run check`, `npm pack --dry-run`, and
-`npm publish --access public --provenance`. After publication, MCP clients can
-install with:
+`npm publish --access public --provenance` through GitHub OIDC. If npm does not
+allow trusted-publisher setup before the first package version exists, do a
+one-time local first publish with a real npm publish OTP, then configure Trusted
+Publishing for all later releases.
+
+After publication, MCP clients can install with:
 
 ```sh
 npx -y @axiom-foundation/mcp

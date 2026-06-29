@@ -5,7 +5,7 @@
   "description": "MCP server adapter for the Axiom Rule API.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TheAxiomFoundation/axiom-mcp.git"
+    "url": "git+https://github.com/TheAxiomFoundation/axiom-mcp.git"
   },
   "homepage": "https://github.com/TheAxiomFoundation/axiom-mcp#readme",
   "bugs": {
