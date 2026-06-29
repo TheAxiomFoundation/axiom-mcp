@@ -39,6 +39,26 @@ Claude Desktop example:
 }
 ```
 
+GitHub install example while the npm package is not published:
+
+```json
+{
+  "mcpServers": {
+    "axiom": {
+      "command": "npx",
+      "args": ["-y", "github:TheAxiomFoundation/axiom-mcp"],
+      "env": {
+        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_KEY": "axiom_..."
+      }
+    }
+  }
+}
+```
+
+The GitHub install path requires GitHub access to this repository. Public users
+should use the npm package once `@axiom-foundation/mcp` is published.
+
 For local development before the package is published, point the client at the
 checkout:
 
