@@ -26,7 +26,7 @@
     "test": "vitest run",
     "mcp": "tsx src/index.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
-    "prepack": "npm run build",
+    "prepare": "npm run build",
     "check": "npm run build && npm test"
   },
   "engines": {
