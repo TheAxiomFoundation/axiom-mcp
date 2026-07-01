@@ -1,0 +1,134 @@
+# Axiom MCP Quickstart
+
+This guide connects an MCP client to the Axiom Rule API through the public
+GitHub install path.
+
+## Prerequisites
+
+- Node.js `>=22.12.0`
+- An Axiom API key
+- An MCP client such as Claude Desktop, Cursor, or another client that supports
+  stdio MCP servers
+
+The MCP server is an adapter. It does not contain rules or secrets. It calls the
+configured Axiom API with the API key you provide in the client environment.
+
+## API Key Scopes
+
+Use the narrowest key that fits the workflow:
+
+```txt
+rules:read      search rules, read rule details, list executable packages
+sources:read    read source and provenance references
+graphs:read     read dependency/dependent graphs
+calculate:run   run household calculations
+admin:parity    list and run parity cases
+```
+
+For a read-only research assistant, start with `rules:read`, `sources:read`,
+and `graphs:read`. For calculation workflows, add `calculate:run`.
+
+## Claude Desktop
+
+Add this to your Claude Desktop MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "axiom": {
+      "command": "npx",
+      "args": ["-y", "github:TheAxiomFoundation/axiom-mcp"],
+      "env": {
+        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_KEY": "axiom_..."
+      }
+    }
+  }
+}
+```
+
+Replace `axiom_...` with your API key, then restart the MCP client.
+
+## Cursor
+
+Use the same server definition:
+
+```json
+{
+  "mcpServers": {
+    "axiom": {
+      "command": "npx",
+      "args": ["-y", "github:TheAxiomFoundation/axiom-mcp"],
+      "env": {
+        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_KEY": "axiom_..."
+      }
+    }
+  }
+}
+```
+
+## First Requests
+
+After the client starts, ask it to use Axiom tools for tasks such as:
+
+```txt
+Search Axiom for Colorado SNAP utility allowance rules and cite the sources.
+```
+
+```txt
+List executable Axiom runtime packages and show the sample request for Colorado SNAP.
+```
+
+```txt
+Run the Axiom parity cases and summarize any differences.
+```
+
+For calculation work, first ask the client to call `get_runtime_package` so it
+can see the package's supported inputs, outputs, aliases, and sample request.
+
+## Available Tools
+
+- `get_capabilities`
+- `search_rules`
+- `get_rule`
+- `get_rule_sources`
+- `get_rule_dependencies`
+- `list_runtime_packages`
+- `get_runtime_package`
+- `list_parity_cases`
+- `run_parity_cases`
+- `calculate_household`
+
+## Troubleshooting
+
+If the client cannot start the server, confirm Node is new enough:
+
+```sh
+node --version
+```
+
+If the client reports `unauthorized`, check that `AXIOM_API_KEY` is present in
+the MCP server environment and has the scopes needed by the tool.
+
+If the client reports `rate_limited`, wait for the API response's
+`retry-after` interval before retrying.
+
+If `npx` cannot install from GitHub, test the install path directly:
+
+```sh
+npx -y github:TheAxiomFoundation/axiom-mcp
+```
+
+The command starts a stdio MCP server and will wait for an MCP client. Stop it
+with `Ctrl+C` when running it manually.
+
+## Direct API Fallback
+
+The HTTP API is the source of truth. If MCP setup is blocked, clients can call
+the API directly:
+
+```sh
+curl https://axiom-api-eta.vercel.app/v1/runtime/packages \
+  -H "Authorization: Bearer axiom_..."
+```

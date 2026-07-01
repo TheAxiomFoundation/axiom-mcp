@@ -6,6 +6,8 @@ and calculation execution go through the HTTP API.
 
 ## Run
 
+For a client-focused setup guide, see [docs/quickstart.md](docs/quickstart.md).
+
 From a checkout:
 
 ```sh
@@ -56,8 +58,9 @@ GitHub install example while the npm package is not published:
 }
 ```
 
-The GitHub install path requires GitHub access to this repository. Public users
-should use the npm package once `@axiom-foundation/mcp` is published.
+The GitHub install path works for public users while the npm package is not
+published. The npm package remains the preferred long-term distribution path
+once `@axiom-foundation/mcp` is published.
 
 For local development before the package is published, point the client at the
 checkout:
@@ -141,6 +144,7 @@ the response's `retry-after` interval.
 ```sh
 npm run check
 npm pack --dry-run
+npm run smoke:github-install
 ```
 
 Live smoke against the deployed API:

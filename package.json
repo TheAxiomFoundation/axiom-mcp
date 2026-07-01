@@ -19,12 +19,14 @@
   },
   "files": [
     "dist",
+    "docs",
     "README.md"
   ],
   "scripts": {
     "build": "rm -rf dist && tsc",
     "test": "vitest run",
     "mcp": "tsx src/index.ts",
+    "smoke:github-install": "tsx scripts/smoke-github-install.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
     "prepare": "npm run build",
     "check": "npm run build && npm test"
