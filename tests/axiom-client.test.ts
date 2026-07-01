@@ -70,6 +70,66 @@ describe("AxiomApiClient", () => {
     } satisfies Partial<AxiomApiError>);
   });
 
+  it("captures retry-after headers on rate-limited responses", async () => {
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () =>
+        Response.json(
+          { status: "error", error: { code: "rate_limited" } },
+          { status: 429, headers: { "retry-after": "12" } }
+        )
+    });
+
+    await expect(client.listRuntimePackages()).rejects.toMatchObject({
+      name: "AxiomApiError",
+      status: 429,
+      retryAfter: "12"
+    });
+  });
+
+  it("aborts requests that exceed the configured timeout", async () => {
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      timeoutMs: 20,
+      fetchImpl: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        })
+    });
+
+    await expect(client.listRuntimePackages()).rejects.toThrow(
+      "Axiom API request to https://api.example.test/v1/runtime/packages timed out after 20ms"
+    );
+  });
+
+  it("describes network failures with the request URL", async () => {
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () => {
+        throw new TypeError("fetch failed");
+      }
+    });
+
+    await expect(client.listRuntimePackages()).rejects.toThrow(
+      "Axiom API request to https://api.example.test/v1/runtime/packages failed: fetch failed"
+    );
+  });
+
+  it("rejects successful responses with non-JSON bodies", async () => {
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () =>
+        new Response("<html>upstream proxy error</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        })
+    });
+
+    await expect(client.listRuntimePackages()).rejects.toThrow(
+      "Axiom API /v1/runtime/packages returned HTTP 200 with a non-JSON body"
+    );
+  });
+
   it("calls parity endpoints", async () => {
     const calls: Array<{ url: string; method?: string }> = [];
     const client = new AxiomApiClient({

@@ -136,8 +136,19 @@ Use the narrowest key that matches the agent workflow. A read-only research
 agent usually needs `rules:read`, `sources:read`, and `graphs:read`; a scenario
 runner also needs `calculate:run`.
 
-If the Axiom API returns `429 rate_limited`, the MCP client should retry after
-the response's `retry-after` interval.
+Axiom API errors are returned to the MCP client as structured tool errors that
+include the HTTP status and the API's error body, so agents can see error
+codes, messages, and request ids. If the Axiom API returns `429 rate_limited`,
+the tool error includes the response's `retry-after` value; retry after that
+interval.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AXIOM_API_BASE_URL` | `https://axiom-api-eta.vercel.app` | Axiom API base URL |
+| `AXIOM_API_KEY` | none | Bearer token sent to the API |
+| `AXIOM_API_TIMEOUT_MS` | `30000` | Per-request timeout in milliseconds |
 
 ## Development
 
