@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AxiomApiClient } from "./axiom-client.js";
@@ -14,10 +15,14 @@ import {
   searchRules
 } from "./tool-handlers.js";
 
+const { version: packageVersion } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+) as { version: string };
+
 export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
   const server = new McpServer({
     name: "axiom-mcp",
-    version: "0.1.0"
+    version: packageVersion
   });
   const context = { client };
 
