@@ -214,4 +214,48 @@ describe("Axiom MCP server protocol", () => {
       await server.close();
     }
   });
+
+  it("surfaces Axiom API error bodies through MCP tool errors", async () => {
+    const apiClient = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () =>
+        Response.json(
+          {
+            status: "error",
+            error: { code: "unknown_rule", message: "Rule not found." },
+            meta: { request_id: "req-404" }
+          },
+          { status: 404 }
+        )
+    });
+    const server = createAxiomMcpServer(apiClient);
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport)
+    ]);
+
+    try {
+      const result = await client.callTool({
+        name: "get_rule",
+        arguments: { rule_id: "us-co/missing" }
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        error: {
+          http_status: 404,
+          api_response: {
+            error: { code: "unknown_rule", message: "Rule not found." },
+            meta: { request_id: "req-404" }
+          }
+        }
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
 });

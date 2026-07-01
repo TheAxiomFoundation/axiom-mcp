@@ -8,7 +8,8 @@ async function main() {
   const config = configFromEnv();
   const client = new AxiomApiClient({
     baseUrl: config.apiBaseUrl,
-    apiKey: config.apiKey
+    apiKey: config.apiKey,
+    timeoutMs: config.timeoutMs
   });
   const server = createAxiomMcpServer(client);
   await server.connect(new StdioServerTransport());
