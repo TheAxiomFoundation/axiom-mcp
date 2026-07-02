@@ -1,7 +1,7 @@
 # Axiom MCP Quickstart
 
-This guide connects an MCP client to the Axiom Rule API through the public
-GitHub install path.
+This guide connects an MCP client to the Axiom Rule API through the published
+npm package, `@axiom-foundation/mcp`.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ Add this to your Claude Desktop MCP configuration:
   "mcpServers": {
     "axiom": {
       "command": "npx",
-      "args": ["-y", "github:TheAxiomFoundation/axiom-mcp"],
+      "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
         "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
         "AXIOM_API_KEY": "axiom_..."
@@ -58,7 +58,7 @@ Use the same server definition:
   "mcpServers": {
     "axiom": {
       "command": "npx",
-      "args": ["-y", "github:TheAxiomFoundation/axiom-mcp"],
+      "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
         "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
         "AXIOM_API_KEY": "axiom_..."
@@ -114,7 +114,13 @@ the MCP server environment and has the scopes needed by the tool.
 If the client reports `rate_limited`, wait for the API response's
 `retry-after` interval before retrying.
 
-If `npx` cannot install from GitHub, test the install path directly:
+If `npx` cannot install the package, test the install path directly:
+
+```sh
+npx -y @axiom-foundation/mcp
+```
+
+Installing from GitHub also works and tracks the `main` branch:
 
 ```sh
 npx -y github:TheAxiomFoundation/axiom-mcp

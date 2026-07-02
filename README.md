@@ -41,7 +41,8 @@ Claude Desktop example:
 }
 ```
 
-GitHub install example while the npm package is not published:
+The npm package `@axiom-foundation/mcp` is the primary distribution path.
+Installing from GitHub also works and tracks `main`:
 
 ```json
 {
@@ -58,12 +59,7 @@ GitHub install example while the npm package is not published:
 }
 ```
 
-The GitHub install path works for public users while the npm package is not
-published. The npm package remains the preferred long-term distribution path
-once `@axiom-foundation/mcp` is published.
-
-For local development before the package is published, point the client at the
-checkout:
+For local development, point the client at the checkout:
 
 ```json
 {
@@ -168,7 +164,7 @@ npm run smoke:live
 
 ## Publishing
 
-The package is prepared for npm publication as `@axiom-foundation/mcp`.
+The package is published to npm as `@axiom-foundation/mcp`.
 
 Use npm Trusted Publishing for CI/CD releases instead of a long-lived npm token.
 Configure the package's trusted publisher in npm with:
@@ -187,12 +183,12 @@ https://github.com/TheAxiomFoundation/axiom-mcp/actions
 ```
 
 The publish workflow runs `npm run check`, `npm pack --dry-run`, and
-`npm publish --access public --provenance` through GitHub OIDC. If npm does not
-allow trusted-publisher setup before the first package version exists, do a
-one-time local first publish with a real npm publish OTP, then configure Trusted
-Publishing for all later releases.
+`npm publish --access public --provenance` through GitHub OIDC. The first
+version (`0.1.0`) was published manually because npm requires an existing
+package before trusted publishing can be configured; all later releases should
+go through the workflow.
 
-After publication, MCP clients can install with:
+MCP clients can install with:
 
 ```sh
 npx -y @axiom-foundation/mcp
