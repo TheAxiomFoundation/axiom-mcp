@@ -130,6 +130,105 @@ describe("AxiomApiClient", () => {
     );
   });
 
+  it("calls batch and job endpoints", async () => {
+    const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({
+          url: String(url),
+          method: init?.method,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined
+        });
+        return Response.json({ status: "ok", data: {} });
+      }
+    });
+    const request = {
+      program_id: "co-snap",
+      jurisdiction: "us-co",
+      household: { people: {} }
+    };
+
+    await client.calculateBatch({ requests: [request] });
+    await client.submitCalculationJob({ requests: [request] });
+    await client.getCalculationJob("job-123");
+
+    expect(calls).toEqual([
+      {
+        url: "https://api.example.test/v1/calculate/batch",
+        method: "POST",
+        body: { requests: [request] }
+      },
+      {
+        url: "https://api.example.test/v1/jobs/calculate",
+        method: "POST",
+        body: { requests: [request] }
+      },
+      {
+        url: "https://api.example.test/v1/jobs/job-123",
+        method: "GET",
+        body: undefined
+      }
+    ]);
+  });
+
+  it("retries once when rate-limited with a short retry-after", async () => {
+    let attempts = 0;
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          return Response.json(
+            { status: "error", error: { code: "rate_limited" } },
+            { status: 429, headers: { "retry-after": "0" } }
+          );
+        }
+        return Response.json({ status: "ok", data: { recovered: true } });
+      }
+    });
+
+    await expect(client.listRuntimePackages()).resolves.toMatchObject({
+      data: { recovered: true }
+    });
+    expect(attempts).toBe(2);
+  });
+
+  it("does not retry rate limits with a long retry-after, and only retries once", async () => {
+    let longAttempts = 0;
+    const longWait = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () => {
+        longAttempts += 1;
+        return Response.json(
+          { status: "error", error: { code: "rate_limited" } },
+          { status: 429, headers: { "retry-after": "120" } }
+        );
+      }
+    });
+    await expect(longWait.listRuntimePackages()).rejects.toMatchObject({
+      status: 429,
+      retryAfter: "120"
+    });
+    expect(longAttempts).toBe(1);
+
+    let persistentAttempts = 0;
+    const persistent = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () => {
+        persistentAttempts += 1;
+        return Response.json(
+          { status: "error", error: { code: "rate_limited" } },
+          { status: 429, headers: { "retry-after": "0" } }
+        );
+      }
+    });
+    await expect(persistent.listRuntimePackages()).rejects.toMatchObject({
+      status: 429
+    });
+    expect(persistentAttempts).toBe(2);
+  });
+
   it("calls parity endpoints", async () => {
     const calls: Array<{ url: string; method?: string }> = [];
     const client = new AxiomApiClient({

@@ -87,6 +87,31 @@ export async function calculateHousehold(
   return runTool(() => context.client.calculateHousehold(input));
 }
 
+export async function listPrograms(context: AxiomToolContext): Promise<ToolResult> {
+  return runTool(() => context.client.listPrograms());
+}
+
+export async function calculateBatch(
+  context: AxiomToolContext,
+  input: { requests: unknown[] }
+): Promise<ToolResult> {
+  return runTool(() => context.client.calculateBatch(input));
+}
+
+export async function submitCalculationJob(
+  context: AxiomToolContext,
+  input: { requests: unknown[] }
+): Promise<ToolResult> {
+  return runTool(() => context.client.submitCalculationJob(input));
+}
+
+export async function getCalculationJob(
+  context: AxiomToolContext,
+  input: { job_id: string }
+): Promise<ToolResult> {
+  return runTool(() => context.client.getCalculationJob(input.job_id));
+}
+
 async function runTool(call: () => Promise<unknown>): Promise<ToolResult> {
   try {
     return asToolResult(await call());

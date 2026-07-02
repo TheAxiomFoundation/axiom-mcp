@@ -1,18 +1,23 @@
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { AxiomApiError } from "./axiom-client.js";
 import type { AxiomApiClient } from "./axiom-client.js";
 import {
+  calculateBatch,
   calculateHousehold,
+  getCalculationJob,
   getCapabilities,
   getRule,
   getRuleDependencies,
   getRuleSources,
   getRuntimePackage,
   listParityCases,
+  listPrograms,
   listRuntimePackages,
   runParityCases,
-  searchRules
+  searchRules,
+  submitCalculationJob
 } from "./tool-handlers.js";
 
 const { version: packageVersion } = JSON.parse(
@@ -35,7 +40,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
         "API version, environment, endpoint map, repository status, runtime packages, and sample requests.",
       mimeType: "application/json"
     },
-    async (uri) => jsonResource(uri.href, await client.capabilities)
+    async (uri) => jsonResource(uri.href, await readForResource(() => client.capabilities))
   );
 
   server.registerResource(
@@ -46,7 +51,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
       description: "Programs discoverable from the configured Axiom API.",
       mimeType: "application/json"
     },
-    async (uri) => jsonResource(uri.href, await client.listPrograms())
+    async (uri) => jsonResource(uri.href, await readForResource(() => client.listPrograms()))
   );
 
   server.registerResource(
@@ -57,7 +62,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
       description: "Executable packages from the configured Axiom runtime.",
       mimeType: "application/json"
     },
-    async (uri) => jsonResource(uri.href, await client.listRuntimePackages())
+    async (uri) => jsonResource(uri.href, await readForResource(() => client.listRuntimePackages()))
   );
 
   server.registerResource(
@@ -69,7 +74,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
         "Canonical runtime parity cases, expected outputs, trace variables, notes, and external comparison metadata from the configured Axiom API.",
       mimeType: "application/json"
     },
-    async (uri) => jsonResource(uri.href, await client.listParityCases())
+    async (uri) => jsonResource(uri.href, await readForResource(() => client.listParityCases()))
   );
 
   server.registerTool(
@@ -80,6 +85,16 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
         "Read API version, environment, endpoints, repository status, runtime packages, and sample calculation requests."
     },
     async () => getCapabilities(context)
+  );
+
+  server.registerTool(
+    "list_programs",
+    {
+      title: "List programs",
+      description:
+        "List programs discoverable in the configured Axiom rule index, including those without an executable runtime package."
+    },
+    async () => listPrograms(context)
   );
 
   server.registerTool(
@@ -195,6 +210,52 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     async (input) => calculateHousehold(context, input)
   );
 
+  const calculateRequestSchema = z.object({
+    program_id: z.string().min(1),
+    jurisdiction: z.string().min(1),
+    household: z.record(z.unknown()),
+    variables: z.array(z.string()).optional()
+  });
+
+  server.registerTool(
+    "calculate_batch",
+    {
+      title: "Calculate a batch of households",
+      description:
+        "Run up to 25 calculations in one synchronous request. Results return positionally: results[i] corresponds to requests[i], each independently ok or error.",
+      inputSchema: {
+        requests: z.array(calculateRequestSchema).min(1).max(25)
+      }
+    },
+    async (input) => calculateBatch(context, input)
+  );
+
+  server.registerTool(
+    "submit_calculation_job",
+    {
+      title: "Submit an async calculation job",
+      description:
+        "Submit up to 50 calculations as a detached async job. Returns a job id to poll with get_calculation_job; results are retained for 24 hours and visible only to the submitting API key.",
+      inputSchema: {
+        requests: z.array(calculateRequestSchema).min(1).max(50)
+      }
+    },
+    async (input) => submitCalculationJob(context, input)
+  );
+
+  server.registerTool(
+    "get_calculation_job",
+    {
+      title: "Poll a calculation job",
+      description:
+        "Read the status, progress, and results of a calculation job submitted with submit_calculation_job.",
+      inputSchema: {
+        job_id: z.string().min(1)
+      }
+    },
+    async (input) => getCalculationJob(context, input)
+  );
+
   server.registerPrompt(
     "explain_rule_for_caseworker",
     {
@@ -285,4 +346,30 @@ function jsonResource(uri: string, value: unknown) {
       }
     ]
   };
+}
+
+// Resource reads surface as protocol errors, so make the message carry what
+// the API actually said instead of a bare HTTP status.
+async function readForResource(read: () => Promise<unknown>): Promise<unknown> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof AxiomApiError) {
+      const body =
+        typeof error.body === "object" && error.body !== null
+          ? (error.body as { error?: { code?: string; message?: string }; meta?: { request_id?: string } })
+          : undefined;
+      const detail = [
+        body?.error?.code,
+        body?.error?.message,
+        body?.meta?.request_id ? `request_id ${body.meta.request_id}` : undefined
+      ]
+        .filter(Boolean)
+        .join(" — ");
+      throw new Error(detail ? `${error.message}: ${detail}` : error.message, {
+        cause: error
+      });
+    }
+    throw error;
+  }
 }

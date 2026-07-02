@@ -79,6 +79,7 @@ For local development, point the client at the checkout:
 ## Tools
 
 - `get_capabilities`
+- `list_programs`
 - `search_rules`
 - `get_rule`
 - `get_rule_sources`
@@ -88,6 +89,9 @@ For local development, point the client at the checkout:
 - `list_parity_cases`
 - `run_parity_cases`
 - `calculate_household`
+- `calculate_batch` (up to 25 synchronous calculations, positional results)
+- `submit_calculation_job` (up to 50 calculations as a detached async job)
+- `get_calculation_job` (poll job status, progress, and results)
 
 `list_parity_cases` returns canonical Axiom requests plus optional
 `external_comparisons` metadata for engines such as PolicyEngine. Those
@@ -121,10 +125,10 @@ URL with the configured API key.
 Recommended API key scopes:
 
 ```txt
-rules:read      get_capabilities, search_rules, get_rule, list_runtime_packages, get_runtime_package
+rules:read      get_capabilities, list_programs, search_rules, get_rule, list_runtime_packages, get_runtime_package
 sources:read    get_rule_sources
 graphs:read     get_rule_dependencies
-calculate:run   calculate_household
+calculate:run   calculate_household, calculate_batch, submit_calculation_job, get_calculation_job
 admin:parity    list_parity_cases, run_parity_cases
 ```
 
@@ -134,9 +138,13 @@ runner also needs `calculate:run`.
 
 Axiom API errors are returned to the MCP client as structured tool errors that
 include the HTTP status and the API's error body, so agents can see error
-codes, messages, and request ids. If the Axiom API returns `429 rate_limited`,
-the tool error includes the response's `retry-after` value; retry after that
-interval.
+codes, messages, and request ids. If the Axiom API returns `429 rate_limited`
+with a `retry-after` of 10 seconds or less, the server retries once
+automatically; otherwise the tool error includes the response's `retry-after`
+value — retry after that interval.
+
+Full reference with recorded examples:
+[axiom-api-eta.vercel.app/docs/mcp](https://axiom-api-eta.vercel.app/docs/mcp)
 
 ## Configuration
 
