@@ -3,6 +3,9 @@
 This guide connects an MCP client to the Axiom Rule API through the published
 npm package, `@axiom-foundation/mcp`.
 
+Full reference with tool schemas, recorded examples, and a live console:
+[axiom-api-eta.vercel.app/docs/mcp](https://axiom-api-eta.vercel.app/docs/mcp)
+
 ## Prerequisites
 
 - Node.js `>=22.12.0`

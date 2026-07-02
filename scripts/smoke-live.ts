@@ -19,16 +19,34 @@ await Promise.all([server.connect(serverTransport), client.connect(clientTranspo
 
 try {
   const tools = await client.listTools();
-  assertIncludes(
-    tools.tools.map((tool) => tool.name),
+  const toolNames = tools.tools.map((tool) => tool.name);
+  for (const expected of [
+    "get_capabilities",
+    "list_programs",
     "search_rules",
-    "tools"
-  );
-  assertIncludes(
-    tools.tools.map((tool) => tool.name),
+    "get_rule",
+    "get_rule_sources",
+    "get_rule_dependencies",
+    "list_runtime_packages",
+    "get_runtime_package",
+    "list_parity_cases",
     "run_parity_cases",
-    "tools"
-  );
+    "calculate_household",
+    "calculate_batch",
+    "submit_calculation_job",
+    "get_calculation_job"
+  ]) {
+    assertIncludes(toolNames, expected, "tools");
+  }
+
+  const programs = await client.callTool({ name: "list_programs" });
+  const programRows = readPath<unknown[]>(programs.structuredContent, [
+    "data",
+    "programs"
+  ]);
+  if (!Array.isArray(programRows) || programRows.length < 1) {
+    throw new Error("list_programs returned no programs");
+  }
 
   const capabilities = await client.callTool({ name: "get_capabilities" });
   const packages = readPath<unknown[]>(capabilities.structuredContent, [
@@ -113,6 +131,42 @@ try {
     throw new Error(
       "list_parity_cases did not include CO SNAP PolicyEngine comparison metadata"
     );
+  }
+
+  // Batch calculation needs calculate:run; skip cleanly when the smoke key
+  // is narrower so scope changes do not break the monitor.
+  const packageDetail = readPath<Record<string, unknown>>(
+    runtimePackage.structuredContent,
+    ["data", "package"]
+  );
+  const sampleRequest = readField(packageDetail, "sample_request");
+  if (typeof sampleRequest === "object" && sampleRequest !== null) {
+    const batch = await client.callTool({
+      name: "calculate_batch",
+      arguments: { requests: [sampleRequest, sampleRequest] }
+    });
+    if (batch.isError) {
+      const code = readPath<string>(batch.structuredContent, [
+        "error",
+        "api_response",
+        "error",
+        "code"
+      ]);
+      if (code !== "insufficient_scope") {
+        throw new Error(`calculate_batch failed with ${JSON.stringify(code)}`);
+      }
+      console.log("calculate_batch skipped: smoke key lacks calculate:run");
+    } else {
+      const batchSummary = readPath<Record<string, unknown>>(
+        batch.structuredContent,
+        ["data", "summary"]
+      );
+      if (batchSummary?.total !== 2 || batchSummary?.succeeded !== 2) {
+        throw new Error(
+          `calculate_batch did not succeed positionally: ${JSON.stringify(batchSummary)}`
+        );
+      }
+    }
   }
 
   console.log(`Live MCP smoke passed for ${baseUrl}`);
