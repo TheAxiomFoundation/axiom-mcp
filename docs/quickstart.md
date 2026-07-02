@@ -90,6 +90,7 @@ can see the package's supported inputs, outputs, aliases, and sample request.
 ## Available Tools
 
 - `get_capabilities`
+- `list_programs`
 - `search_rules`
 - `get_rule`
 - `get_rule_sources`
@@ -99,6 +100,9 @@ can see the package's supported inputs, outputs, aliases, and sample request.
 - `list_parity_cases`
 - `run_parity_cases`
 - `calculate_household`
+- `calculate_batch`
+- `submit_calculation_job`
+- `get_calculation_job`
 
 ## Troubleshooting
 

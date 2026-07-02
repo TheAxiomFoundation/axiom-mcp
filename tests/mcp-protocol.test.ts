@@ -112,6 +112,7 @@ describe("Axiom MCP server protocol", () => {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([
+          "list_programs",
           "search_rules",
           "get_rule",
           "get_rule_sources",
@@ -120,7 +121,10 @@ describe("Axiom MCP server protocol", () => {
           "get_runtime_package",
           "list_parity_cases",
           "run_parity_cases",
-          "calculate_household"
+          "calculate_household",
+          "calculate_batch",
+          "submit_calculation_job",
+          "get_calculation_job"
         ])
       );
 
@@ -209,6 +213,38 @@ describe("Axiom MCP server protocol", () => {
         type: "text",
         text: expect.stringContaining("us-co/co-snap")
       });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("carries API error detail in resource read failures", async () => {
+    const apiClient = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () =>
+        Response.json(
+          {
+            status: "error",
+            error: { code: "insufficient_scope", message: "Requires admin:parity." },
+            meta: { request_id: "req-scope" }
+          },
+          { status: 403 }
+        )
+    });
+    const server = createAxiomMcpServer(apiClient);
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport)
+    ]);
+
+    try {
+      await expect(
+        client.readResource({ uri: "axiom://parity/cases" })
+      ).rejects.toThrow(/insufficient_scope.*Requires admin:parity.*req-scope/);
     } finally {
       await client.close();
       await server.close();
