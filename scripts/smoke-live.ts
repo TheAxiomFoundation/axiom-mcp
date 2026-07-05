@@ -133,6 +133,23 @@ try {
     );
   }
 
+  const resources = await client.listResources();
+  assertIncludes(
+    resources.resources.map((resource) => resource.uri),
+    "axiom://capabilities",
+    "resources"
+  );
+  const capabilitiesResource = await client.readResource({
+    uri: "axiom://capabilities"
+  });
+  const resourceText = capabilitiesResource.contents[0]?.text;
+  if (
+    typeof resourceText !== "string" ||
+    JSON.parse(resourceText)?.status !== "ok"
+  ) {
+    throw new Error("axiom://capabilities resource did not return an ok envelope");
+  }
+
   // Batch calculation needs calculate:run; skip cleanly when the smoke key
   // is narrower so scope changes do not break the monitor.
   const packageDetail = readPath<Record<string, unknown>>(
@@ -165,6 +182,64 @@ try {
         throw new Error(
           `calculate_batch did not succeed positionally: ${JSON.stringify(batchSummary)}`
         );
+      }
+    }
+  }
+
+  // Async job flow: submit one calculation as a detached job and poll it to
+  // completion, proving durable job persistence across instances. Skips
+  // cleanly alongside calculate_batch when the key lacks calculate:run.
+  if (typeof sampleRequest === "object" && sampleRequest !== null) {
+    const submitted = await client.callTool({
+      name: "submit_calculation_job",
+      arguments: { requests: [sampleRequest] }
+    });
+    if (submitted.isError) {
+      const code = readPath<string>(submitted.structuredContent, [
+        "error",
+        "api_response",
+        "error",
+        "code"
+      ]);
+      if (code !== "insufficient_scope") {
+        throw new Error(
+          `submit_calculation_job failed with ${JSON.stringify(code)}`
+        );
+      }
+      console.log("job flow skipped: smoke key lacks calculate:run");
+    } else {
+      const jobId = readPath<string>(submitted.structuredContent, [
+        "data",
+        "job_id"
+      ]);
+      if (typeof jobId !== "string" || !jobId) {
+        throw new Error("submit_calculation_job returned no job_id");
+      }
+      const deadline = Date.now() + 90_000;
+      let jobStatus: unknown;
+      for (;;) {
+        const polled = await client.callTool({
+          name: "get_calculation_job",
+          arguments: { job_id: jobId }
+        });
+        if (polled.isError) {
+          throw new Error(
+            `get_calculation_job errored: ${JSON.stringify(polled.structuredContent).slice(0, 300)}`
+          );
+        }
+        jobStatus = readPath<string>(polled.structuredContent, ["data", "status"]);
+        if (jobStatus === "succeeded") break;
+        if (jobStatus === "failed") {
+          throw new Error(
+            `calculation job failed: ${JSON.stringify(polled.structuredContent).slice(0, 300)}`
+          );
+        }
+        if (Date.now() > deadline) {
+          throw new Error(
+            `calculation job did not finish within 90s (last status: ${String(jobStatus)})`
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }
   }
