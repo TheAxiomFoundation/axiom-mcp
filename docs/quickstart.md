@@ -8,7 +8,7 @@ Full reference with tool schemas, recorded examples, and a live console:
 
 ## Prerequisites
 
-- Node.js `>=22.12.0`
+- Node.js `>=20.0.0`
 - An Axiom API key — no key yet? Issue yourself a free trial key (14-day
   expiry, read + calculate scopes, no signup):
 
