@@ -122,6 +122,10 @@ The server does not expose shell execution, arbitrary network fetch, database
 access, or write/admin operations. It only calls the configured Axiom API base
 URL with the configured API key.
 
+No API key yet? Issue yourself a trial key (14-day expiry, read +
+calculate scopes, no signup): `curl -s -X POST
+https://axiom-api-eta.vercel.app/v1/keys/trial`
+
 Recommended API key scopes:
 
 ```txt
