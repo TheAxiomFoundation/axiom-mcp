@@ -9,7 +9,14 @@ Full reference with tool schemas, recorded examples, and a live console:
 ## Prerequisites
 
 - Node.js `>=22.12.0`
-- An Axiom API key
+- An Axiom API key — no key yet? Issue yourself a free trial key (14-day
+  expiry, read + calculate scopes, no signup):
+
+  ```sh
+  curl -s -X POST https://axiom-api-eta.vercel.app/v1/keys/trial
+  ```
+
+  Durable keys are issued by Axiom administrators.
 - An MCP client such as Claude Desktop, Cursor, or another client that supports
   stdio MCP servers
 
