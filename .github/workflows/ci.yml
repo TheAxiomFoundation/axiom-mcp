@@ -12,10 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Node 22 is the engines floor; Windows exercises the platform
+        # Node 20 is the engines floor; Windows exercises the platform
         # branches in the install smoke and stdio spawning.
         os: [ubuntu-latest, windows-latest]
-        node: ["22.12", "24"]
+        node: ["20", "22", "24"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
