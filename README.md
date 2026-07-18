@@ -4,6 +4,11 @@ MCP server adapter for the Axiom Rule API. The server is intentionally thin:
 all rule search, retrieval, source lookup, graph traversal, package discovery,
 and calculation execution go through the HTTP API.
 
+**Status: developer preview.** The MCP server and the hosted API it talks to
+are open for evaluation with self-serve trial keys. Interfaces and limits may
+change before general availability; pin versions and expect breaking changes
+between minors.
+
 ## Run
 
 For a client-focused setup guide, see [docs/quickstart.md](docs/quickstart.md).
