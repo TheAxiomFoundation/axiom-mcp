@@ -16,7 +16,7 @@ For a client-focused setup guide, see [docs/quickstart.md](docs/quickstart.md).
 From a checkout:
 
 ```sh
-AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
+AXIOM_API_BASE_URL=https://api.axiom-foundation.org \
 AXIOM_API_KEY=... \
 npm run mcp
 ```
@@ -24,7 +24,7 @@ npm run mcp
 After installation:
 
 ```sh
-AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
+AXIOM_API_BASE_URL=https://api.axiom-foundation.org \
 AXIOM_API_KEY=... \
 axiom-mcp
 ```
@@ -38,7 +38,7 @@ Claude Desktop example:
       "command": "npx",
       "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_BASE_URL": "https://api.axiom-foundation.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -56,7 +56,7 @@ Installing from GitHub also works and tracks `main`:
       "command": "npx",
       "args": ["-y", "github:TheAxiomFoundation/axiom-mcp"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_BASE_URL": "https://api.axiom-foundation.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -73,7 +73,7 @@ For local development, point the client at the checkout:
       "command": "node",
       "args": ["/path/to/axiom-mcp/dist/index.js"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_BASE_URL": "https://api.axiom-foundation.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -129,7 +129,7 @@ URL with the configured API key.
 
 No API key yet? Issue yourself a trial key (14-day expiry, read +
 calculate scopes, no signup): `curl -s -X POST
-https://axiom-api-eta.vercel.app/v1/keys/trial`
+https://api.axiom-foundation.org/v1/keys/trial`
 
 Recommended API key scopes:
 
@@ -153,13 +153,13 @@ automatically; otherwise the tool error includes the response's `retry-after`
 value — retry after that interval.
 
 Full reference with recorded examples:
-[axiom-api-eta.vercel.app/docs/mcp](https://axiom-api-eta.vercel.app/docs/mcp)
+[api.axiom-foundation.org/docs/mcp](https://api.axiom-foundation.org/docs/mcp)
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AXIOM_API_BASE_URL` | `https://axiom-api-eta.vercel.app` | Axiom API base URL |
+| `AXIOM_API_BASE_URL` | `https://api.axiom-foundation.org` | Axiom API base URL |
 | `AXIOM_API_KEY` | none | Bearer token sent to the API |
 | `AXIOM_API_TIMEOUT_MS` | `30000` | Per-request timeout in milliseconds |
 
@@ -174,7 +174,7 @@ npm run smoke:github-install
 Live smoke against the deployed API:
 
 ```sh
-AXIOM_API_BASE_URL=https://axiom-api-eta.vercel.app \
+AXIOM_API_BASE_URL=https://api.axiom-foundation.org \
 AXIOM_API_KEY=... \
 npm run smoke:live
 ```
