@@ -8,7 +8,7 @@ evaluation, subject to interface and limit changes before general
 availability.
 
 Full reference with tool schemas, recorded examples, and a live console:
-[api.axiom-foundation.org/docs/mcp](https://api.axiom-foundation.org/docs/mcp)
+[api.axiom.org/docs/mcp](https://api.axiom.org/docs/mcp)
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Full reference with tool schemas, recorded examples, and a live console:
   expiry, read + calculate scopes, no signup):
 
   ```sh
-  curl -s -X POST https://api.axiom-foundation.org/v1/keys/trial
+  curl -s -X POST https://api.axiom.org/v1/keys/trial
   ```
 
   Durable keys are issued by Axiom administrators.
@@ -53,7 +53,7 @@ Add this to your Claude Desktop MCP configuration:
       "command": "npx",
       "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://api.axiom-foundation.org",
+        "AXIOM_API_BASE_URL": "https://api.axiom.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -74,7 +74,7 @@ Use the same server definition:
       "command": "npx",
       "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://api.axiom-foundation.org",
+        "AXIOM_API_BASE_URL": "https://api.axiom.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -153,6 +153,6 @@ The HTTP API is the source of truth. If MCP setup is blocked, clients can call
 the API directly:
 
 ```sh
-curl https://api.axiom-foundation.org/v1/runtime/packages \
+curl https://api.axiom.org/v1/runtime/packages \
   -H "Authorization: Bearer axiom_..."
 ```
