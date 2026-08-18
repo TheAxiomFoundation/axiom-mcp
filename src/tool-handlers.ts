@@ -1,5 +1,5 @@
 import { AxiomApiError } from "./axiom-client.js";
-import type { AxiomApiClient } from "./axiom-client.js";
+import type { AxiomApiClient, CalculateRequest } from "./axiom-client.js";
 
 export interface AxiomToolContext {
   client: AxiomApiClient;
@@ -77,14 +77,69 @@ export async function runParityCases(
 
 export async function calculateHousehold(
   context: AxiomToolContext,
-  input: {
-    program_id: string;
-    jurisdiction: string;
-    household: Record<string, unknown>;
-    variables?: string[];
-  }
+  input: CalculateRequest
 ): Promise<ToolResult> {
   return runTool(() => context.client.calculateHousehold(input));
+}
+
+export async function getVersion(context: AxiomToolContext): Promise<ToolResult> {
+  return runTool(() => context.client.getVersion());
+}
+
+export async function listCertifiedNodes(
+  context: AxiomToolContext,
+  input: { limit?: number; offset?: number }
+): Promise<ToolResult> {
+  return runTool(() => context.client.listCertifiedNodes(input));
+}
+
+export async function getNode(
+  context: AxiomToolContext,
+  input: { legal_id: string }
+): Promise<ToolResult> {
+  return runTool(() => context.client.getNode(input.legal_id));
+}
+
+export async function listCorpusSubtrees(
+  context: AxiomToolContext
+): Promise<ToolResult> {
+  return runTool(() => context.client.listCorpusSubtrees());
+}
+
+export async function composeGraph(
+  context: AxiomToolContext,
+  input: { focus: string }
+): Promise<ToolResult> {
+  return runTool(() => context.client.composeGraph(input.focus));
+}
+
+export async function getSubgraph(
+  context: AxiomToolContext,
+  input: { roots: string[] }
+): Promise<ToolResult> {
+  return runTool(() => context.client.getSubgraph(input.roots));
+}
+
+export async function getRootInputs(
+  context: AxiomToolContext,
+  input: { root: string }
+): Promise<ToolResult> {
+  return runTool(() => context.client.getRootInputs(input.root));
+}
+
+export async function listRuntimeArtifacts(
+  context: AxiomToolContext
+): Promise<ToolResult> {
+  return runTool(() => context.client.listRuntimeArtifacts());
+}
+
+export async function calculateHouseholdCompat(
+  context: AxiomToolContext,
+  input: { country_id: string; household: Record<string, unknown> }
+): Promise<ToolResult> {
+  return runTool(() =>
+    context.client.calculateHouseholdCompat(input.country_id, input.household)
+  );
 }
 
 export async function listPrograms(context: AxiomToolContext): Promise<ToolResult> {

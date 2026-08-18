@@ -83,20 +83,45 @@ For local development, point the client at the checkout:
 
 ## Tools
 
-- `get_capabilities`
-- `list_programs`
-- `search_rules`
-- `get_rule`
-- `get_rule_sources`
-- `get_rule_dependencies`
-- `list_runtime_packages`
-- `get_runtime_package`
-- `list_parity_cases`
-- `run_parity_cases`
-- `calculate_household`
-- `calculate_batch` (up to 25 synchronous calculations, positional results)
-- `submit_calculation_job` (up to 50 calculations as a detached async job)
-- `get_calculation_job` (poll job status, progress, and results)
+The server is a pure pass-through: every public, non-admin route of the
+Axiom API is a tool. Tool arguments are forwarded as-is; validation and
+error codes come from the API.
+
+Discovery and meta
+
+- `get_capabilities` — `GET /v1/capabilities`
+- `get_version` — `GET /v1/version`
+- `list_programs` — `GET /v1/programs`
+- `list_certified_nodes` — `GET /v1/certified` (paged)
+- `list_corpus_subtrees` — `GET /v1/corpus/subtrees` (every subtree executable on demand)
+
+Rules and graphs
+
+- `search_rules` — `POST /v1/search`
+- `get_rule`, `get_rule_sources`, `get_rule_dependencies` — `GET /v1/rules/{id}[/sources|/dependencies]`
+- `get_node` — `GET /v1/nodes/{legal_id}` (certified node detail)
+- `compose_graph` — `GET /v1/graph/compose?focus=` (dependency graph for any rule or file)
+- `get_subgraph` — `GET /v1/subgraph?roots=` (certified closure from up to 20 roots)
+
+Runtime
+
+- `list_runtime_packages`, `get_runtime_package` — `GET /v1/runtime/packages[/{j}/{p}]`
+- `get_root_inputs` — `GET /v1/runtime/root-inputs?root=` (input catalog for any root)
+- `list_runtime_artifacts` — `GET /v1/runtime/artifacts` (pinned artifact identities)
+
+Calculate
+
+- `calculate_household` — `POST /v1/calculate`. Two addressing modes, mutually
+  exclusive: a registered package (`program_id` + `jurisdiction`) or any
+  corpus subtree compiled on demand (`root`, e.g. `us:statutes/7/2014/e/6/A`).
+  `facts` is sugar for `household.facts`.
+- `calculate_batch` — up to 25 synchronous calculations, positional results
+- `submit_calculation_job` / `get_calculation_job` — up to 50 as a detached async job
+- `calculate_household_compat` — `POST /v1/household/{country_id}/calculate` (PolicyEngine wire format)
+
+Parity
+
+- `list_parity_cases`, `run_parity_cases`
 
 `list_parity_cases` returns canonical Axiom requests plus optional
 `external_comparisons` metadata for engines such as PolicyEngine. Those
@@ -113,12 +138,14 @@ from another engine.
 - `axiom://capabilities`
 - `axiom://programs`
 - `axiom://runtime/packages`
+- `axiom://corpus/subtrees`
 - `axiom://parity/cases`
 
 ## Prompts
 
 - `explain_rule_for_caseworker`
 - `trace_household_result`
+- `run_corpus_subtree`
 - `find_missing_household_inputs`
 
 ## Security
@@ -134,10 +161,10 @@ https://axiom-api-eta.vercel.app/v1/keys/trial`
 Recommended API key scopes:
 
 ```txt
-rules:read      get_capabilities, list_programs, search_rules, get_rule, list_runtime_packages, get_runtime_package
+rules:read      get_capabilities, get_version, list_programs, search_rules, get_rule, get_node, list_certified_nodes, list_corpus_subtrees, list_runtime_packages, get_runtime_package, get_root_inputs, list_runtime_artifacts
 sources:read    get_rule_sources
-graphs:read     get_rule_dependencies
-calculate:run   calculate_household, calculate_batch, submit_calculation_job, get_calculation_job
+graphs:read     get_rule_dependencies, compose_graph, get_subgraph
+calculate:run   calculate_household, calculate_household_compat, calculate_batch, submit_calculation_job, get_calculation_job
 admin:parity    list_parity_cases, run_parity_cases
 ```
 

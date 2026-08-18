@@ -172,6 +172,83 @@ describe("AxiomApiClient", () => {
     ]);
   });
 
+  it("wraps every public API route as a pass-through", async () => {
+    const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({
+          url: String(url),
+          method: init?.method,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined
+        });
+        return Response.json({ status: "ok", data: {} });
+      }
+    });
+
+    await client.getVersion();
+    await client.listCertifiedNodes({ limit: 5, offset: 10 });
+    await client.listCertifiedNodes();
+    await client.getNode("us:statutes/7/2014/e/6/A#rule");
+    await client.listCorpusSubtrees();
+    await client.composeGraph("us-ny:policies/otda/snap#allotment");
+    await client.getSubgraph(["a:x#one", "b:y#two"]);
+    await client.getRootInputs("ca:policies/cra/t1-2025/canada-workers-benefit");
+    await client.listRuntimeArtifacts();
+    await client.calculateHousehold({
+      root: "ca:policies/cra/t1-2025/canada-workers-benefit",
+      facts: { claimant_working_income: 9000 },
+      variables: ["canada_workers_benefit_line_45300"]
+    });
+    await client.calculateHouseholdCompat("us", { people: { you: {} } });
+
+    expect(calls).toEqual([
+      { url: "https://api.example.test/v1/version", method: "GET", body: undefined },
+      {
+        url: "https://api.example.test/v1/certified?limit=5&offset=10",
+        method: "GET",
+        body: undefined
+      },
+      { url: "https://api.example.test/v1/certified", method: "GET", body: undefined },
+      {
+        url: "https://api.example.test/v1/nodes/us%3Astatutes/7/2014/e/6/A%23rule",
+        method: "GET",
+        body: undefined
+      },
+      { url: "https://api.example.test/v1/corpus/subtrees", method: "GET", body: undefined },
+      {
+        url: "https://api.example.test/v1/graph/compose?focus=us-ny%3Apolicies%2Fotda%2Fsnap%23allotment",
+        method: "GET",
+        body: undefined
+      },
+      {
+        url: "https://api.example.test/v1/subgraph?roots=a%3Ax%23one%2Cb%3Ay%23two",
+        method: "GET",
+        body: undefined
+      },
+      {
+        url: "https://api.example.test/v1/runtime/root-inputs?root=ca%3Apolicies%2Fcra%2Ft1-2025%2Fcanada-workers-benefit",
+        method: "GET",
+        body: undefined
+      },
+      { url: "https://api.example.test/v1/runtime/artifacts", method: "GET", body: undefined },
+      {
+        url: "https://api.example.test/v1/calculate",
+        method: "POST",
+        body: {
+          root: "ca:policies/cra/t1-2025/canada-workers-benefit",
+          facts: { claimant_working_income: 9000 },
+          variables: ["canada_workers_benefit_line_45300"]
+        }
+      },
+      {
+        url: "https://api.example.test/v1/household/us/calculate",
+        method: "POST",
+        body: { household: { people: { you: {} } } }
+      }
+    ]);
+  });
+
   it("retries once when rate-limited with a short retry-after", async () => {
     let attempts = 0;
     const client = new AxiomApiClient({
