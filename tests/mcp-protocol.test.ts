@@ -124,7 +124,16 @@ describe("Axiom MCP server protocol", () => {
           "calculate_household",
           "calculate_batch",
           "submit_calculation_job",
-          "get_calculation_job"
+          "get_calculation_job",
+          "get_version",
+          "list_certified_nodes",
+          "get_node",
+          "list_corpus_subtrees",
+          "compose_graph",
+          "get_subgraph",
+          "get_root_inputs",
+          "list_runtime_artifacts",
+          "calculate_household_compat"
         ])
       );
 

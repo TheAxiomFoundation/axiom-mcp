@@ -31,6 +31,18 @@ export class AxiomApiError extends Error {
   }
 }
 
+// Mirrors POST /v1/calculate: address either a registered program
+// (program_id + jurisdiction) or any rulespec subtree (root). The API
+// enforces mutual exclusion; the client forwards the body untouched.
+export interface CalculateRequest {
+  program_id?: string;
+  jurisdiction?: string;
+  root?: string;
+  household?: Record<string, unknown>;
+  facts?: Record<string, unknown>;
+  variables?: string[];
+}
+
 export class AxiomApiClient {
   private readonly baseUrl: string;
   private readonly apiKey: string | null;
@@ -46,6 +58,46 @@ export class AxiomApiClient {
 
   get capabilities() {
     return this.request("GET", "/v1/capabilities");
+  }
+
+  getVersion() {
+    return this.request("GET", "/v1/version");
+  }
+
+  listCertifiedNodes(input: { limit?: number; offset?: number } = {}) {
+    return this.request("GET", withQuery("/v1/certified", input));
+  }
+
+  getNode(legalId: string) {
+    return this.request("GET", `/v1/nodes/${encodeRuleId(legalId)}`);
+  }
+
+  listCorpusSubtrees() {
+    return this.request("GET", "/v1/corpus/subtrees");
+  }
+
+  composeGraph(focus: string) {
+    return this.request("GET", withQuery("/v1/graph/compose", { focus }));
+  }
+
+  getSubgraph(roots: string[]) {
+    return this.request("GET", withQuery("/v1/subgraph", { roots: roots.join(",") }));
+  }
+
+  getRootInputs(root: string) {
+    return this.request("GET", withQuery("/v1/runtime/root-inputs", { root }));
+  }
+
+  listRuntimeArtifacts() {
+    return this.request("GET", "/v1/runtime/artifacts");
+  }
+
+  calculateHouseholdCompat(countryId: string, household: Record<string, unknown>) {
+    return this.request(
+      "POST",
+      `/v1/household/${encodeURIComponent(countryId)}/calculate`,
+      { household }
+    );
   }
 
   searchRules(input: {
@@ -92,12 +144,7 @@ export class AxiomApiClient {
     return this.request("POST", "/v1/parity/run");
   }
 
-  calculateHousehold(input: {
-    program_id: string;
-    jurisdiction: string;
-    household: Record<string, unknown>;
-    variables?: string[];
-  }) {
+  calculateHousehold(input: CalculateRequest) {
     return this.request("POST", "/v1/calculate", input);
   }
 
@@ -180,6 +227,18 @@ function describeRequestFailure(
   }
   const detail = error instanceof Error ? error.message : String(error);
   return `Axiom API request to ${baseUrl}${path} failed: ${detail}`;
+}
+
+function withQuery(
+  path: string,
+  params: Record<string, string | number | undefined>
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const encoded = query.toString();
+  return encoded ? `${path}?${encoded}` : path;
 }
 
 function encodeRuleId(ruleId: string): string {
