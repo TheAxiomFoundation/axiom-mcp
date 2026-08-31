@@ -3,7 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { AxiomApiClient } from "../src/axiom-client.js";
 import { createAxiomMcpServer } from "../src/server.js";
 
-const baseUrl = process.env.AXIOM_API_BASE_URL || "https://axiom-api-eta.vercel.app";
+const baseUrl = process.env.AXIOM_API_BASE_URL || "https://api.axiom.org";
 const apiKey = process.env.AXIOM_API_KEY || "";
 
 if (!apiKey) {
