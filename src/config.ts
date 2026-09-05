@@ -10,7 +10,7 @@ export function configFromEnv(): AxiomMcpConfig {
   return {
     apiBaseUrl:
       process.env.AXIOM_API_BASE_URL?.replace(/\/+$/, "") ||
-      "https://axiom-api-eta.vercel.app",
+      "https://api.axiom.org",
     apiKey: process.env.AXIOM_API_KEY || null,
     timeoutMs: timeoutFromEnv(process.env.AXIOM_API_TIMEOUT_MS)
   };
