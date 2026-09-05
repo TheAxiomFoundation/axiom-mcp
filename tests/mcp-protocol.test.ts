@@ -159,6 +159,7 @@ describe("Axiom MCP server protocol", () => {
           "axiom://capabilities",
           "axiom://programs",
           "axiom://runtime/packages",
+          "axiom://corpus/subtrees",
           "axiom://parity/cases"
         ])
       );
@@ -210,6 +211,7 @@ describe("Axiom MCP server protocol", () => {
         expect.arrayContaining([
           "explain_rule_for_caseworker",
           "trace_household_result",
+          "run_corpus_subtree",
           "find_missing_household_inputs"
         ])
       );
@@ -222,6 +224,52 @@ describe("Axiom MCP server protocol", () => {
         type: "text",
         text: expect.stringContaining("us-co/co-snap")
       });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("discovers and forwards subtree requests through the MCP schemas", async () => {
+    // Transport fixtures only: the adapter forwards requests to the real API;
+    // this test does not implement or assert policy calculations.
+    const root = "test:synthetic/example";
+    const request = { root, facts: { example_input: 7 }, variables: ["example_output"] };
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const apiClient = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url, init) => {
+        const path = new URL(String(url)).pathname;
+        calls.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        return Response.json({
+          status: "ok",
+          data: path === "/v1/corpus/subtrees" ? { subtrees: [{ root }] } : { accepted: true },
+          meta: {}
+        });
+      }
+    });
+    const server = createAxiomMcpServer(apiClient);
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const resource = await client.readResource({ uri: "axiom://corpus/subtrees" });
+      expect(JSON.parse(resource.contents[0]?.text ?? "{}")).toMatchObject({
+        data: { subtrees: [{ root }] }
+      });
+      const prompt = await client.getPrompt({ name: "run_corpus_subtree", arguments: { root } });
+      expect(prompt.messages[0]?.content).toMatchObject({
+        type: "text", text: expect.stringContaining(root)
+      });
+      const single = await client.callTool({ name: "calculate_household", arguments: request });
+      const batch = await client.callTool({ name: "calculate_batch", arguments: { requests: [request] } });
+      expect(single.isError).not.toBe(true);
+      expect(batch.isError).not.toBe(true);
+      expect(calls).toEqual([
+        { path: "/v1/corpus/subtrees", body: undefined },
+        { path: "/v1/calculate", body: request },
+        { path: "/v1/calculate/batch", body: { requests: [request] } }
+      ]);
     } finally {
       await client.close();
       await server.close();

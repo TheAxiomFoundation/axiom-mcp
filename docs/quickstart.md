@@ -100,23 +100,39 @@ Run the Axiom parity cases and summarize any differences.
 
 For calculation work, first ask the client to call `get_runtime_package` so it
 can see the package's supported inputs, outputs, aliases, and sample request.
+For a corpus subtree, use `get_root_inputs` with its `root`, then pass `root`
+and `facts` to `calculate_household`.
 
 ## Available Tools
 
 - `get_capabilities`
+- `get_version`
 - `list_programs`
+- `list_certified_nodes`
+- `list_corpus_subtrees`
 - `search_rules`
 - `get_rule`
 - `get_rule_sources`
 - `get_rule_dependencies`
+- `get_node`
+- `compose_graph`
+- `get_subgraph`
 - `list_runtime_packages`
 - `get_runtime_package`
+- `get_root_inputs`
+- `list_runtime_artifacts`
 - `list_parity_cases`
 - `run_parity_cases`
 - `calculate_household`
+- `calculate_household_compat`
 - `calculate_batch`
 - `submit_calculation_job`
 - `get_calculation_job`
+
+The `axiom://corpus/subtrees` resource lists executable subtrees. The
+`run_corpus_subtree` prompt guides input discovery and calculation for a root.
+See the [README](../README.md#resources) for the complete resource and prompt
+inventory.
 
 ## Troubleshooting
 
