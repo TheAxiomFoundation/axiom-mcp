@@ -8,7 +8,7 @@ evaluation, subject to interface and limit changes before general
 availability.
 
 Full reference with tool schemas, recorded examples, and a live console:
-[axiom-api-eta.vercel.app/docs/mcp](https://axiom-api-eta.vercel.app/docs/mcp)
+[api.axiom.org/docs/mcp](https://api.axiom.org/docs/mcp)
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Full reference with tool schemas, recorded examples, and a live console:
   expiry, read + calculate scopes, no signup):
 
   ```sh
-  curl -s -X POST https://axiom-api-eta.vercel.app/v1/keys/trial
+  curl -s -X POST https://api.axiom.org/v1/keys/trial
   ```
 
   Durable keys are issued by Axiom administrators.
@@ -53,7 +53,7 @@ Add this to your Claude Desktop MCP configuration:
       "command": "npx",
       "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_BASE_URL": "https://api.axiom.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -74,7 +74,7 @@ Use the same server definition:
       "command": "npx",
       "args": ["-y", "@axiom-foundation/mcp"],
       "env": {
-        "AXIOM_API_BASE_URL": "https://axiom-api-eta.vercel.app",
+        "AXIOM_API_BASE_URL": "https://api.axiom.org",
         "AXIOM_API_KEY": "axiom_..."
       }
     }
@@ -100,23 +100,39 @@ Run the Axiom parity cases and summarize any differences.
 
 For calculation work, first ask the client to call `get_runtime_package` so it
 can see the package's supported inputs, outputs, aliases, and sample request.
+For a corpus subtree, use `get_root_inputs` with its `root`, then pass `root`
+and `facts` to `calculate_household`.
 
 ## Available Tools
 
 - `get_capabilities`
+- `get_version`
 - `list_programs`
+- `list_certified_nodes`
+- `list_corpus_subtrees`
 - `search_rules`
 - `get_rule`
 - `get_rule_sources`
 - `get_rule_dependencies`
+- `get_node`
+- `compose_graph`
+- `get_subgraph`
 - `list_runtime_packages`
 - `get_runtime_package`
+- `get_root_inputs`
+- `list_runtime_artifacts`
 - `list_parity_cases`
 - `run_parity_cases`
 - `calculate_household`
+- `calculate_household_compat`
 - `calculate_batch`
 - `submit_calculation_job`
 - `get_calculation_job`
+
+The `axiom://corpus/subtrees` resource lists executable subtrees. The
+`run_corpus_subtree` prompt guides input discovery and calculation for a root.
+See the [README](../README.md#resources) for the complete resource and prompt
+inventory.
 
 ## Troubleshooting
 
@@ -153,6 +169,6 @@ The HTTP API is the source of truth. If MCP setup is blocked, clients can call
 the API directly:
 
 ```sh
-curl https://axiom-api-eta.vercel.app/v1/runtime/packages \
+curl https://api.axiom.org/v1/runtime/packages \
   -H "Authorization: Bearer axiom_..."
 ```
