@@ -237,3 +237,7 @@ MCP clients can install with:
 ```sh
 npx -y @axiom-foundation/mcp
 ```
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
