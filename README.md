@@ -237,3 +237,7 @@ MCP clients can install with:
 ```sh
 npx -y @axiom-foundation/mcp
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
