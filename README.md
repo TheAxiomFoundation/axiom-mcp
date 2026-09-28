@@ -92,16 +92,29 @@ Discovery and meta
 - `get_capabilities` — `GET /v1/capabilities`
 - `get_version` — `GET /v1/version`
 - `list_programs` — `GET /v1/programs`
-- `list_certified_nodes` — `GET /v1/certified` (paged)
+- `list_certified_nodes` — `GET /v1/certified` (paged: enforcement mode, ledger
+  entries, status counts, pending list)
 - `list_corpus_subtrees` — `GET /v1/corpus/subtrees` (every subtree executable on demand)
 
 Rules and graphs
 
 - `search_rules` — `POST /v1/search`
 - `get_rule`, `get_rule_sources`, `get_rule_dependencies` — `GET /v1/rules/{id}[/sources|/dependencies]`
-- `get_node` — `GET /v1/nodes/{legal_id}` (certified node detail)
+- `get_node` — `GET /v1/nodes/{legal_id}` (node detail with certification
+  status; `certificate` is null for a node not in the ledger)
 - `compose_graph` — `GET /v1/graph/compose?focus=` (dependency graph for any rule or file)
-- `get_subgraph` — `GET /v1/subgraph?roots=` (certified closure from up to 20 roots)
+- `get_subgraph` — `GET /v1/subgraph?roots=` (dependency closure from up to 20
+  roots)
+
+Certification is reported, not enforced, unless the API runs in `enforced`
+mode. The API default is `permissive`: `get_node` and `get_subgraph` serve
+every node in the package graphs the API serves, certified or not, and a node
+not in the ledger has a null `certificate`. Under `enforced` they serve only
+rules in the ledger whose dependency closure is fully certified, plus the
+certified inputs and relations those rules use. Both tools report the mode in
+`meta.certified.enforcement`, and `list_certified_nodes` reports it with the
+ledger. Ids outside the served package graphs are `404 uncertified_node` in
+either mode.
 
 Runtime
 
