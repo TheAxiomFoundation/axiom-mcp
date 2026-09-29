@@ -33,6 +33,12 @@ const { version: packageVersion } = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8")
 ) as { version: string };
 
+// What node reads serve under the API's opt-in `enforced` certification
+// mode (axiom-api certifiedGraphView). The default, `permissive`, serves
+// uncertified nodes too, so no description may state this as always on.
+const ENFORCED_NODES =
+  "certified rules and parameters whose rule, input, and relation dependencies are all certified (checked transitively), plus the certified inputs and relations reachable from them";
+
 export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
   const server = new McpServer({
     name: "axiom-mcp",
@@ -122,7 +128,9 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "Read the certification ledger",
       description:
-        "Page through the certification ledger the API serves under: the enforcement mode, the ledger's identity, vintage, and entries, status counts over the nodes get_node serves, and the pending list. Under `permissive` (the API default) the ledger labels nodes but does not limit what is served; under `enforced`, get_node and get_subgraph serve only rules in the ledger whose dependency closure is fully certified, plus the certified inputs and relations those rules use.",
+        "Read the certification ledger the API serves under: the enforcement mode; the ledger's metadata (its id and vintage when the ledger is valid); its entries, paged by limit and offset; status counts (certified, validated, encoded) over the nodes get_node serves, plus the pending count; and the full pending list (legal ids a closure ledger names that are not encoded yet). " +
+        "Under `permissive` (the API default) the ledger labels nodes but does not limit what any tool serves. " +
+        `Under \`enforced\` the ledger also gates search, rule reads, programs, compose_graph, runtime packages, and calculations, and get_node and get_subgraph serve only ${ENFORCED_NODES}.`,
       inputSchema: {
         limit: z.number().int().min(1).max(500).optional(),
         offset: z.number().int().min(0).optional()
@@ -136,7 +144,10 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "Get a node",
       description:
-        "Read one node (rule, parameter, input, or relation) of a served runtime package graph by legal id, with its certification status, its certificate (null when the node is not in the ledger), and, when the ledger is valid, the ledger id and vintage. Under `permissive` (the API default) uncertified nodes are served. Under `enforced` only rules in the ledger whose dependency closure is fully certified, plus the certified inputs and relations those rules use, are readable. An id outside the served package graphs is a 404 `uncertified_node` in either mode; `meta.certified.enforcement` reports the mode.",
+        "Read one node (kind `derived`, `parameter`, `input`, or `relation`) of the compiled runtime packages' graphs by legal id, with its certification status (`certified`, `validated`, or `encoded`), its certificate (null unless the node is in a valid ledger), and, when the ledger is valid, the ledger id and vintage. " +
+        "Under `permissive` (the API default) uncertified nodes are served. " +
+        `Under \`enforced\` only ${ENFORCED_NODES} are readable. ` +
+        "An id outside the package graphs served in the current mode is a 404 `uncertified_node`; under `permissive` that means the id is not in a served package graph, not that the node is uncertified. Successful responses report the mode in `meta.certified.enforcement`.",
       inputSchema: {
         legal_id: z.string().min(1)
       }
@@ -173,7 +184,10 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "Get a node subgraph",
       description:
-        "Read the dependency closure of up to 20 root node legal ids, over the nodes get_node serves, in program-graph shape. Every root must be a node get_node serves (otherwise 404 `uncertified_node`). Under `permissive` (the API default) the closure includes uncertified nodes; under `enforced` it holds only the certified nodes get_node serves in that mode. Closures are cut at 500 nodes and flagged truncated; `meta.certified.enforcement` reports the mode.",
+        "Read the dependency closure of up to 20 root node legal ids, over the nodes get_node serves, in program-graph shape. Every root must be a node get_node serves (otherwise 404 `uncertified_node`). " +
+        "Under `permissive` (the API default) the closure is not filtered by certification and can include uncertified nodes. " +
+        `Under \`enforced\` it holds only ${ENFORCED_NODES}. ` +
+        "Rule and parameter nodes carry `certificationStatus`, plus `certificateId` when certified; input and relation nodes carry no status (use get_node). Closures are cut at 500 nodes and flagged truncated. Successful responses report the mode in `meta.certified.enforcement`.",
       inputSchema: {
         roots: z.array(z.string().min(1)).min(1).max(20)
       }

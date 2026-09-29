@@ -290,19 +290,19 @@ describe("Axiom MCP server protocol", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const { tools } = await client.listTools();
+      const toolNamed = (name: string) => tools.find((tool) => tool.name === name);
       for (const name of ["list_certified_nodes", "get_node", "get_subgraph"]) {
-        const tool = tools.find((candidate) => candidate.name === name);
-        expect(tool?.description).toContain("`permissive` (the API default)");
-        expect(tool?.description).toContain("`enforced`");
+        const description = toolNamed(name)?.description ?? "";
+        expect(description).toMatch(/`permissive` \(the API default\)/);
+        expect(description).toMatch(/`enforced`/);
+        expect(description).not.toMatch(/^(Read|Get|Page through) (one |the )?certified/i);
       }
       for (const name of ["get_node", "get_subgraph"]) {
-        const tool = tools.find((candidate) => candidate.name === name);
-        expect(tool?.title).not.toMatch(/certified/i);
-        expect(tool?.description).toContain("uncertified_node");
+        expect(toolNamed(name)?.title).not.toMatch(/certified/i);
+        expect(toolNamed(name)?.description).toContain("uncertified_node");
+        expect(toolNamed(name)?.description).toContain("meta.certified.enforcement");
       }
-      expect(tools.find((tool) => tool.name === "get_node")?.description).toContain(
-        "null when the node is not in the ledger"
-      );
+      expect(toolNamed("get_node")?.description).toMatch(/certificate \(null unless/);
     } finally {
       await client.close();
       await server.close();
