@@ -295,7 +295,7 @@ describe("Axiom MCP server protocol", () => {
         const description = toolNamed(name)?.description ?? "";
         expect(description).toMatch(/`permissive` \(the API default\)/);
         expect(description).toMatch(/`enforced`/);
-        expect(description).not.toMatch(/^(Read|Get|Page through) (one |the )?certified/i);
+        expect(description).not.toMatch(/^(Read|Get|Page through) (one |the |a )?certified/i);
       }
       for (const name of ["get_node", "get_subgraph"]) {
         expect(toolNamed(name)?.title).not.toMatch(/certified/i);

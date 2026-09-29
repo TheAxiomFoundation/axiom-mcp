@@ -128,7 +128,7 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "Read the certification ledger",
       description:
-        "Read the certification ledger the API serves under: the enforcement mode; the ledger's metadata (its id and vintage when the ledger is valid); its entries, paged by limit and offset; status counts (certified, validated, encoded) over the nodes get_node serves, plus the pending count; and the full pending list (legal ids a closure ledger names that are not encoded yet). " +
+        "Read the certification ledger the API serves under: the enforcement mode; the ledger's metadata (its id and vintage when the ledger is valid); its entries, paged by limit and offset; status counts (certified, validated, and encoded, with incomplete_by_declaration counted within encoded) over the nodes get_node serves, plus the pending count; and the full pending list (legal ids a closure ledger names that are not encoded yet). " +
         "Under `permissive` (the API default) the ledger labels nodes but does not limit what any tool serves. " +
         `Under \`enforced\` the ledger also gates search, rule reads, programs, compose_graph, runtime packages, and calculations, and get_node and get_subgraph serve only ${ENFORCED_NODES}.`,
       inputSchema: {
