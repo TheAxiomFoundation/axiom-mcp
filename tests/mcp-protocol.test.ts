@@ -276,6 +276,39 @@ describe("Axiom MCP server protocol", () => {
     }
   });
 
+  it("describes node reads under both certification enforcement modes", async () => {
+    // The API serves uncertified nodes unless a deployment opts into
+    // `enforced` (axiom-api certifiedEnforcement()), so no node-read tool
+    // may describe certified-only serving as unconditional.
+    const apiClient = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async () => Response.json({ status: "ok", data: {}, meta: {} })
+    });
+    const server = createAxiomMcpServer(apiClient);
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const { tools } = await client.listTools();
+      const toolNamed = (name: string) => tools.find((tool) => tool.name === name);
+      for (const name of ["list_certified_nodes", "get_node", "get_subgraph"]) {
+        const description = toolNamed(name)?.description ?? "";
+        expect(description).toMatch(/`permissive` \(the API default\)/);
+        expect(description).toMatch(/`enforced`/);
+        expect(description).not.toMatch(/^(Read|Get|Page through) (one |the |a )?certified/i);
+      }
+      for (const name of ["get_node", "get_subgraph"]) {
+        expect(toolNamed(name)?.title).not.toMatch(/certified/i);
+        expect(toolNamed(name)?.description).toContain("uncertified_node");
+        expect(toolNamed(name)?.description).toContain("meta.certified.enforcement");
+      }
+      expect(toolNamed("get_node")?.description).toMatch(/certificate \(null unless/);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("carries API error detail in resource read failures", async () => {
     const apiClient = new AxiomApiClient({
       baseUrl: "https://api.example.test",

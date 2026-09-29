@@ -92,16 +92,39 @@ Discovery and meta
 - `get_capabilities` — `GET /v1/capabilities`
 - `get_version` — `GET /v1/version`
 - `list_programs` — `GET /v1/programs`
-- `list_certified_nodes` — `GET /v1/certified` (paged)
+- `list_certified_nodes` — `GET /v1/certified` (enforcement mode, ledger
+  metadata, paged ledger entries, status counts, pending list)
 - `list_corpus_subtrees` — `GET /v1/corpus/subtrees` (every subtree executable on demand)
 
 Rules and graphs
 
 - `search_rules` — `POST /v1/search`
 - `get_rule`, `get_rule_sources`, `get_rule_dependencies` — `GET /v1/rules/{id}[/sources|/dependencies]`
-- `get_node` — `GET /v1/nodes/{legal_id}` (certified node detail)
+- `get_node` — `GET /v1/nodes/{legal_id}` (node detail with certification
+  status; `certificate` is null unless the node is in a valid ledger)
 - `compose_graph` — `GET /v1/graph/compose?focus=` (dependency graph for any rule or file)
-- `get_subgraph` — `GET /v1/subgraph?roots=` (certified closure from up to 20 roots)
+- `get_subgraph` — `GET /v1/subgraph?roots=` (dependency closure from up to 20
+  roots)
+
+Certification is reported, not enforced, unless the API runs in `enforced`
+mode. The API default is `permissive`: `get_node` and `get_subgraph` serve
+every node of the compiled runtime packages' graphs, certified or not, and a
+node's `certificate` is null unless it is in a valid ledger. (Under
+`permissive`, each package graph is trimmed to the dependency closure of its
+`graph_roots`, or of its default outputs when `graph_roots` is absent,
+whenever those resolve to nodes.) Under `enforced` they serve only certified
+rules and parameters whose rule, input, and relation dependencies are all
+certified (checked transitively), plus the certified inputs and relations
+reachable from them, and the same ledger also gates search, rule reads, programs,
+`compose_graph`, runtime packages, and calculations.
+
+An id outside the package graphs served in the current mode is
+`404 uncertified_node`. Under `permissive` that means the id is not in a
+served package graph (legal ids from `compose_graph` may not be), not that the
+node is uncertified. Successful responses report the mode in
+`meta.certified.enforcement`; in an MCP tool error the API's response
+envelope, when there is one, is under `error.api_response`.
+`list_certified_nodes` also reports the mode, with the ledger.
 
 Runtime
 
