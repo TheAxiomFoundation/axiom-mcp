@@ -167,7 +167,7 @@ describe("Axiom MCP server protocol", () => {
       const capabilities = await client.readResource({
         uri: "axiom://capabilities"
       });
-      expect(JSON.parse(capabilities.contents[0]?.text ?? "{}")).toMatchObject({
+      expect(JSON.parse(resourceText(capabilities))).toMatchObject({
         data: { runtime: { package_count: 2 } }
       });
 
@@ -254,7 +254,7 @@ describe("Axiom MCP server protocol", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const resource = await client.readResource({ uri: "axiom://corpus/subtrees" });
-      expect(JSON.parse(resource.contents[0]?.text ?? "{}")).toMatchObject({
+      expect(JSON.parse(resourceText(resource))).toMatchObject({
         data: { subtrees: [{ root }] }
       });
       const prompt = await client.getPrompt({ name: "run_corpus_subtree", arguments: { root } });
@@ -529,3 +529,9 @@ describe("Axiom MCP server protocol", () => {
     }
   });
 });
+
+// A resource's contents are text or blob, so `text` needs narrowing.
+function resourceText(result: { contents: Array<Record<string, unknown>> }): string {
+  const content = result.contents[0];
+  return content && typeof content.text === "string" ? content.text : "{}";
+}
