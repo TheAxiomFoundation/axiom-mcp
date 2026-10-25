@@ -1,6 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { AxiomApiClient } from "../src/axiom-client.js";
+import {
+  describeParityReview,
+  reviewParityRun
+} from "../src/parity-report.js";
 import { createAxiomMcpServer } from "../src/server.js";
 
 const baseUrl = process.env.AXIOM_API_BASE_URL || "https://api.axiom.org";
@@ -109,13 +113,16 @@ try {
     "data",
     "summary"
   ]);
-  if (!paritySummary || paritySummary.matching !== paritySummary.total) {
-    throw new Error("run_parity_cases did not return all matching cases");
-  }
   const parityResults = readPath<unknown[]>(parity.structuredContent, [
     "data",
     "results"
   ]);
+  const parityReview = reviewParityRun(paritySummary, parityResults);
+  if (parityReview.problems.length > 0) {
+    throw new Error(parityReview.problems.join("\n"));
+  }
+  for (const line of describeParityReview(parityReview)) console.log(line);
+
   const coSnapParity = parityResults?.find(
     (result) =>
       readField(result, "id") === "co-snap-us-co-family-1"
