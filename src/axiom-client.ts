@@ -31,16 +31,30 @@ export class AxiomApiError extends Error {
   }
 }
 
-// Mirrors POST /v1/calculate: address either a registered program
-// (program_id + jurisdiction) or any rulespec subtree (root). The API
-// enforces mutual exclusion; the client forwards the body untouched.
+// Mirrors POST /v1/calculate: address a registered program (program_id +
+// jurisdiction), any rulespec subtree (root), or nothing at all — the
+// variable-addressed shape, which the API recognises by `variables` with
+// neither program_id nor root. The API enforces mutual exclusion and owns
+// validation; the client forwards the body untouched, unknown fields
+// included, so the API can refuse them by name.
 export interface CalculateRequest {
   program_id?: string;
   jurisdiction?: string;
-  root?: string;
   household?: Record<string, unknown>;
+  root?: string;
+  input_contract?: string;
   facts?: Record<string, unknown>;
+  period?: string;
+  state?: string;
+  people?: Record<string, unknown>;
+  unit?: Record<string, unknown>;
+  spm_units?: Record<string, unknown>;
+  tax_units?: Record<string, unknown>;
+  households?: Record<string, unknown>;
   variables?: string[];
+  // Entity groups this deployment declares beyond the three named above,
+  // and any field the API adds after this release.
+  [field: string]: unknown;
 }
 
 export class AxiomApiClient {

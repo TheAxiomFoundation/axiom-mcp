@@ -384,4 +384,148 @@ describe("Axiom MCP server protocol", () => {
       await server.close();
     }
   });
+
+  it("forwards every calculate addressing mode without stripping fields", async () => {
+    // POST /v1/calculate picks its mode from the body's shape, and the
+    // variable-addressed mode (axiom-api isNativeCalculateBody: no
+    // program_id, no root, an array of `variables`) carries entity-shaped
+    // fields a strict schema would drop. A stripped body still parses as
+    // that mode, so the API would answer 200 against an empty household
+    // instead of refusing — every field has to reach it intact.
+    const calls: Array<{ path: string; body: unknown }> = [];
+    const apiClient = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({
+          path: new URL(String(url)).pathname,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined
+        });
+        return Response.json({ status: "ok", data: {}, meta: {} });
+      }
+    });
+    const server = createAxiomMcpServer(apiClient);
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const variableAddressed = {
+      period: "2026-01",
+      state: "CO",
+      people: { maria: { age: 34 }, leo: { age: 6 } },
+      spm_units: {
+        family: { members: ["maria", "leo"], snap_gross_monthly_income: 2000 }
+      },
+      variables: ["snap_benefit_amount"]
+    };
+    const singleUnit = {
+      period: "2026-01",
+      jurisdiction: "us-co",
+      people: { maria: { age: 34 } },
+      unit: { snap_gross_monthly_income: 2000, shelter_costs: 0 },
+      variables: ["snap_benefit_amount"]
+    };
+    const rootMode = {
+      root: "ca:policies/cra/t1-2025/canada-workers-benefit",
+      input_contract: "selected-year-facts-v1",
+      facts: { claimant_working_income: 9000 },
+      variables: ["canada_workers_benefit_line_45300"]
+    };
+    const packageMode = {
+      program_id: "co-snap",
+      jurisdiction: "us-co",
+      household: { people: { person_1: { age: 34 } } }
+    };
+
+    try {
+      for (const request of [variableAddressed, singleUnit, rootMode, packageMode]) {
+        const result = await client.callTool({
+          name: "calculate_household",
+          arguments: request
+        });
+        expect(result.isError).not.toBe(true);
+      }
+      await client.callTool({
+        name: "calculate_batch",
+        arguments: { requests: [variableAddressed, rootMode] }
+      });
+      await client.callTool({
+        name: "submit_calculation_job",
+        arguments: { requests: [variableAddressed] }
+      });
+
+      expect(calls).toEqual([
+        { path: "/v1/calculate", body: variableAddressed },
+        { path: "/v1/calculate", body: singleUnit },
+        { path: "/v1/calculate", body: rootMode },
+        { path: "/v1/calculate", body: packageMode },
+        {
+          path: "/v1/calculate/batch",
+          body: { requests: [variableAddressed, rootMode] }
+        },
+        { path: "/v1/jobs/calculate", body: { requests: [variableAddressed] } }
+      ]);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("forwards entity groups and unknown calculate fields for the API to judge", async () => {
+    // Entity groups are whatever plural the admitted packages declare
+    // (axiom-api groupToken), so the schema cannot name them all; and the
+    // API refuses an unknown field by name rather than ignoring it, which
+    // it can only do if the field arrives.
+    const calls: unknown[] = [];
+    const apiClient = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (_url, init) => {
+        calls.push(init?.body ? JSON.parse(String(init.body)) : undefined);
+        return Response.json({ status: "ok", data: {}, meta: {} });
+      }
+    });
+    const server = createAxiomMcpServer(apiClient);
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const request = {
+      period: "2026-01",
+      people: { maria: { age: 34 } },
+      families: { household_1: { members: ["maria"], shelter_costs: 400 } },
+      tax_units: { filers: { members: ["maria"] } },
+      households: { home: { members: ["maria"] } },
+      not_a_field_the_api_knows: true,
+      variables: ["snap_benefit_amount"]
+    };
+
+    try {
+      await client.callTool({ name: "calculate_household", arguments: request });
+      expect(calls).toEqual([request]);
+
+      const { tools } = await client.listTools();
+      const schema = tools.find((tool) => tool.name === "calculate_household")?.inputSchema;
+      expect(schema?.additionalProperties).toBe(true);
+      expect(Object.keys(schema?.properties ?? {})).toEqual(
+        expect.arrayContaining([
+          "program_id",
+          "jurisdiction",
+          "household",
+          "root",
+          "input_contract",
+          "facts",
+          "period",
+          "state",
+          "people",
+          "unit",
+          "spm_units",
+          "tax_units",
+          "households",
+          "variables"
+        ])
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
 });

@@ -98,10 +98,29 @@ List executable Axiom runtime packages and show the sample request for Colorado 
 Run the Axiom parity cases and summarize any differences.
 ```
 
-For calculation work, first ask the client to call `get_runtime_package` so it
-can see the package's supported inputs, outputs, aliases, and sample request.
-For a corpus subtree, use `get_root_inputs` with its `root`, then pass `root`
-and `facts` to `calculate_household`.
+`calculate_household` takes three addressing modes. The simplest names no
+package and no root: send the `variables` you want plus what you know, and
+the API resolves each variable to whatever can serve it.
+
+```json
+{
+  "period": "2026-01",
+  "state": "CO",
+  "people": { "maria": { "age": 34 }, "leo": { "age": 6 } },
+  "unit": { "snap_gross_monthly_income": 2000, "shelter_costs": 0 },
+  "variables": ["snap_benefit_amount"]
+}
+```
+
+For more than one unit, replace `unit` with entity groups such as
+`spm_units` or `tax_units`, keyed by your own unit ids, each carrying
+`members` and that unit's facts.
+
+To address a registered package instead, first ask the client to call
+`get_runtime_package` so it can see the package's supported inputs, outputs,
+aliases, and sample request, then send `program_id`, `jurisdiction`, and
+`household`. For a corpus subtree, use `get_root_inputs` with its `root`,
+then pass `root` and `facts`.
 
 ## Available Tools
 

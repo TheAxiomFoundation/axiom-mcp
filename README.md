@@ -134,10 +134,27 @@ Runtime
 
 Calculate
 
-- `calculate_household` — `POST /v1/calculate`. Two addressing modes, mutually
-  exclusive: a registered package (`program_id` + `jurisdiction`) or any
-  corpus subtree compiled on demand (`root`, e.g. `us:statutes/7/2014/e/6/A`).
-  `facts` is sugar for `household.facts`.
+- `calculate_household` — `POST /v1/calculate`. Three addressing modes,
+  mutually exclusive, picked by the API from the body's shape:
+  - Variable-addressed: `variables` with no `program_id` and no `root`, plus
+    `period` (`YYYY` or `YYYY-MM`), `state` (two letters) or `jurisdiction`
+    (`us-xx`) — send one spelling or the other — `people` keyed by your own
+    ids, and either `unit` for a single unit or entity groups such as
+    `spm_units` and `tax_units`, keyed by your own unit ids, each carrying
+    `members` and that unit's facts. Variable names resolve through the
+    variables catalog; unsupported ones come back in `unsupported[]` instead
+    of failing the request.
+  - Root: any corpus subtree compiled on demand (`root`, e.g.
+    `us:statutes/7/2014/e/6/A`). `facts` is sugar for `household.facts`, and
+    `input_contract` is valid only here.
+  - Package: a registered package (`program_id` + `jurisdiction`) with
+    `household`.
+
+  The tool schema is passthrough, not strict. Entity groups are whatever
+  plurals the admitted packages declare, so the schema cannot name them all,
+  and the API refuses an unknown field by name rather than ignoring it —
+  both need the field to arrive. Unknown fields are therefore forwarded, and
+  the API's error is the one you see.
 - `calculate_batch` — up to 25 synchronous calculations, positional results
 - `submit_calculation_job` / `get_calculation_job` — up to 50 as a detached async job
 - `calculate_household_compat` — `POST /v1/household/{country_id}/calculate` (PolicyEngine wire format)
