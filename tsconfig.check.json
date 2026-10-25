@@ -1,0 +1,14 @@
+// Type-checking config. tsconfig.json builds dist from src, so it sees
+// nothing under scripts/ or tests/, and vitest transpiles without checking
+// types. Between them, a type error in a script or a test could only show up
+// when the live smoke ran it. This config checks everything and emits
+// nothing.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+}

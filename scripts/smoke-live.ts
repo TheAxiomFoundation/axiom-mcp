@@ -167,7 +167,10 @@ try {
   const capabilitiesResource = await client.readResource({
     uri: "axiom://capabilities"
   });
-  const resourceText = capabilitiesResource.contents[0]?.text;
+  // A resource's contents are text or blob, so `text` needs narrowing.
+  const resourceContent = capabilitiesResource.contents[0];
+  const resourceText =
+    resourceContent && "text" in resourceContent ? resourceContent.text : undefined;
   if (
     typeof resourceText !== "string" ||
     JSON.parse(resourceText)?.status !== "ok"
