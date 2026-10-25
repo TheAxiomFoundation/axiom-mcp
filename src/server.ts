@@ -326,31 +326,55 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     async () => runParityCases(context)
   );
 
-  // Mirrors POST /v1/calculate. Two addressing modes, enforced by the API:
-  // a registered program (program_id + jurisdiction) or any rulespec
-  // subtree (root, compiled on demand). `facts` is API sugar for
-  // household.facts.
-  const calculateRequestShape = {
-    program_id: z.string().min(1).optional(),
-    jurisdiction: z.string().min(1).optional(),
-    root: z.string().min(1).optional(),
-    household: z.record(z.unknown()).optional(),
-    facts: z.record(z.unknown()).optional(),
-    variables: z.array(z.string()).optional()
-  };
+  // Mirrors POST /v1/calculate. Three addressing modes, picked by the API
+  // from the body's shape: variable-addressed (no program_id, no root, an
+  // array of `variables`), root (`root`, compiled on demand), or a
+  // registered package (program_id + jurisdiction). `facts` is API sugar
+  // for household.facts.
+  //
+  // The schema is passthrough, not strict: the API owns validation, and it
+  // refuses an unknown field rather than ignoring it. Stripping here would
+  // hide the field from the API instead — and a stripped variable-addressed
+  // body still parses as one, so it answers 200 against an empty household.
+  // Passthrough also carries the entity groups this deployment declares
+  // (any regular plural, e.g. `families`) without a list to maintain.
+  const calculateRequestSchema = z
+    .object({
+      // Package mode.
+      program_id: z.string().min(1).optional(),
+      jurisdiction: z.string().min(1).optional(),
+      household: z.record(z.unknown()).optional(),
+      // Root mode.
+      root: z.string().min(1).optional(),
+      input_contract: z.string().min(1).optional(),
+      facts: z.record(z.unknown()).optional(),
+      // Variable-addressed mode.
+      period: z.string().min(1).optional(),
+      state: z.string().min(1).optional(),
+      people: z.record(z.unknown()).optional(),
+      unit: z.record(z.unknown()).optional(),
+      spm_units: z.record(z.unknown()).optional(),
+      tax_units: z.record(z.unknown()).optional(),
+      households: z.record(z.unknown()).optional(),
+      // Every mode.
+      variables: z.array(z.string()).optional()
+    })
+    .passthrough();
 
   server.registerTool(
     "calculate_household",
     {
       title: "Calculate a household",
       description:
-        "Run a calculation. Address a registered package with program_id + jurisdiction (discover inputs with get_runtime_package), or run any corpus subtree on demand with root (discover inputs with get_root_inputs). The two modes are mutually exclusive.",
-      inputSchema: calculateRequestShape
+        "Run a calculation in one of three addressing modes, which the API picks from the body's shape. " +
+        "Variable-addressed: send `variables` with no program_id and no root, plus what you know — `period` (YYYY or YYYY-MM), `state` (two letters) or `jurisdiction` (`us-xx`, send one spelling or the other), `people` keyed by your own ids, and either `unit` for a single unit or entity groups such as `spm_units` and `tax_units` keyed by your own unit ids, each with `members` and that unit's facts. Resolve variable names with the variables catalog; unsupported ones come back in `unsupported[]` rather than failing. " +
+        "Root: run any corpus subtree on demand with `root` and `facts` (discover inputs with get_root_inputs); `input_contract` selects source-declared annual facts and is valid only here. " +
+        "Package: address a registered package with program_id + jurisdiction and `household` (discover inputs with get_runtime_package). " +
+        "The modes are mutually exclusive. Unknown fields are forwarded, and the API refuses them by name.",
+      inputSchema: calculateRequestSchema
     },
     async (input) => calculateHousehold(context, input)
   );
-
-  const calculateRequestSchema = z.object(calculateRequestShape);
 
   server.registerTool(
     "calculate_household_compat",
