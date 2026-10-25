@@ -8,13 +8,18 @@ import {
   calculateHousehold,
   calculateHouseholdCompat,
   composeGraph,
+  getBundledValidation,
   getCalculationJob,
   getCapabilities,
+  getHealth,
   getNode,
+  getPackageGraph,
+  getReadiness,
   getRootInputs,
   getRule,
   getRuleDependencies,
   getRuleSources,
+  getRuleVersions,
   getRuntimePackage,
   getSubgraph,
   getVersion,
@@ -24,6 +29,7 @@ import {
   listPrograms,
   listRuntimeArtifacts,
   listRuntimePackages,
+  listVariables,
   runParityCases,
   searchRules,
   submitCalculationJob
@@ -121,6 +127,53 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
       description: "Read the API version, environment, and deployment identity."
     },
     async () => getVersion(context)
+  );
+
+  server.registerTool(
+    "check_health",
+    {
+      title: "Check API liveness",
+      description:
+        "Check that the Axiom API is reachable and serving. Needs no API key."
+    },
+    async () => getHealth(context)
+  );
+
+  server.registerTool(
+    "check_readiness",
+    {
+      title: "Check API dependency readiness",
+      description:
+        "Check whether the API's dependencies are ready to serve. Use it when calculations or rule reads fail and you need to tell an unready deployment from a bad request. Needs no API key."
+    },
+    async () => getReadiness(context)
+  );
+
+  server.registerTool(
+    "list_variables",
+    {
+      title: "List the variables catalog",
+      description:
+        "List every output a caller can request and every input a caller can supply, assembled from the package and mapping registries — nothing is authored. Rows carry name, kind, entity, dtype, period, jurisdiction, and legal id. This is how you resolve a variable name before a variable-addressed calculate_household call. Which package or root serves an output is deliberately absent; the calculation response's provenance carries serving identity.",
+      inputSchema: {
+        jurisdiction: z.string().min(1).optional(),
+        kind: z.enum(["output", "input"]).optional(),
+        q: z.string().min(1).optional(),
+        limit: z.number().int().min(1).max(500).optional(),
+        offset: z.number().int().min(0).optional()
+      }
+    },
+    async (input) => listVariables(context, input)
+  );
+
+  server.registerTool(
+    "get_bundled_validation",
+    {
+      title: "Get the bundled validation snapshot",
+      description:
+        "Read the comparison run and partner demand summary committed in this deployment's bundle. It is a snapshot, never live, and the same under both enforcement modes. Needs no API key."
+    },
+    async () => getBundledValidation(context)
   );
 
   server.registerTool(
@@ -250,12 +303,28 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     {
       title: "Get an Axiom rule",
       description:
-        "Read one rule by stable rule id or citation path, including summary, symbols, provenance, dependencies, and dependents.",
+        "Read one rule by stable rule id or citation path, including summary, symbols, provenance, dependencies, and dependents. `as_of` (YYYY-MM-DD or YYYY-MM) narrows `rule.versions` to the versions in force on that date and adds a `coverage` block; the rest of the record has no version axis and is served at HEAD either way.",
       inputSchema: {
-        rule_id: z.string().min(1)
+        rule_id: z.string().min(1),
+        as_of: z.string().min(1).optional()
       }
     },
     async (input) => getRule(context, input)
+  );
+
+  server.registerTool(
+    "get_rule_versions",
+    {
+      title: "Get a rule's version history",
+      description:
+        "Read every (symbol, version) pair the rule's RuleSpec module retained, with each version's valid-time window, citation, and formula or values. `symbol` restricts the list to one RuleSpec rule name inside the module; `as_of` (YYYY-MM-DD or YYYY-MM) returns only the versions in force on that date, at most one per symbol. Read `coverage` before concluding anything from a gap: a symbol with one version has no retained history, which is not evidence that the rule never changed.",
+      inputSchema: {
+        rule_id: z.string().min(1),
+        symbol: z.string().min(1).optional(),
+        as_of: z.string().min(1).optional()
+      }
+    },
+    async (input) => getRuleVersions(context, input)
   );
 
   server.registerTool(
@@ -304,6 +373,22 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
       }
     },
     async (input) => getRuntimePackage(context, input)
+  );
+
+  server.registerTool(
+    "get_package_graph",
+    {
+      title: "Get a package's rule graph",
+      description:
+        "Read one executable package's rules, inputs, relations, and terminal outputs as a directed acyclic graph derived from the compiled artifact, with certificates and certification statuses stamped on. Use it to explain how a program's outputs are computed. " +
+        "Under `permissive` (the API default) the graph is the dependency closure of the package's graph roots — its default outputs when it declares none — uncertified rules included. " +
+        "Under `enforced` it is the servable part of the whole compiled graph, not pruned to the graph roots, and a package with nothing servable returns `rules: []`.",
+      inputSchema: {
+        jurisdiction: z.string().min(1),
+        program_id: z.string().min(1)
+      }
+    },
+    async (input) => getPackageGraph(context, input)
   );
 
   server.registerTool(

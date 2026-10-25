@@ -18,6 +18,14 @@ jobs:
 
       - run: npm ci
 
+      # GET /v1/openapi.json is unauthenticated, so this runs whether or not
+      # a key is configured. It is the only thing that notices when the API
+      # grows a public route this server does not wrap.
+      - name: Check the API surface against the deployed contract
+        env:
+          AXIOM_API_BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
+        run: npm run check:api-surface
+
       - name: Check live smoke configuration
         id: config
         env:

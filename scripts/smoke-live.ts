@@ -27,8 +27,11 @@ try {
     "get_rule",
     "get_rule_sources",
     "get_rule_dependencies",
+    "get_rule_versions",
+    "list_variables",
     "list_runtime_packages",
     "get_runtime_package",
+    "get_package_graph",
     "list_parity_cases",
     "run_parity_cases",
     "calculate_household",
@@ -37,6 +40,21 @@ try {
     "get_calculation_job"
   ]) {
     assertIncludes(toolNames, expected, "tools");
+  }
+
+  // The catalog is what resolves a variable name for a variable-addressed
+  // calculation, so an empty one breaks that mode without breaking any
+  // package call.
+  const variables = await client.callTool({
+    name: "list_variables",
+    arguments: { kind: "output", limit: 5 }
+  });
+  const variableRows = readPath<unknown[]>(variables.structuredContent, [
+    "data",
+    "variables"
+  ]);
+  if (!Array.isArray(variableRows) || variableRows.length < 1) {
+    throw new Error("list_variables returned no outputs");
   }
 
   const programs = await client.callTool({ name: "list_programs" });

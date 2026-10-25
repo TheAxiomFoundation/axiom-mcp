@@ -87,19 +87,37 @@ The server is a pure pass-through: every public, non-admin route of the
 Axiom API is a tool. Tool arguments are forwarded as-is; validation and
 error codes come from the API.
 
+That claim is checked, not asserted. [`src/api-surface.ts`](src/api-surface.ts)
+maps each public route to its tool and gives a reason for the few that are
+deliberately not tools; `npm run check:api-surface` holds the map against the
+deployed `GET /v1/openapi.json`, and the live-smoke workflow runs it every
+half hour.
+
 Discovery and meta
 
 - `get_capabilities` — `GET /v1/capabilities`
 - `get_version` — `GET /v1/version`
+- `check_health`, `check_readiness` — `GET /v1/health`, `GET /v1/ready` (no API key needed)
 - `list_programs` — `GET /v1/programs`
+- `list_variables` — `GET /v1/variables` (every requestable output and
+  suppliable input, filterable by `jurisdiction`, `kind`, `q`; this is how you
+  resolve a variable name before a variable-addressed calculation)
 - `list_certified_nodes` — `GET /v1/certified` (enforcement mode, ledger
   metadata, paged ledger entries, status counts, pending list)
 - `list_corpus_subtrees` — `GET /v1/corpus/subtrees` (every subtree executable on demand)
+- `get_bundled_validation` — `GET /v1/public/validation/bundled` (the
+  validation snapshot committed with the deployment; no API key needed)
 
 Rules and graphs
 
 - `search_rules` — `POST /v1/search`
-- `get_rule`, `get_rule_sources`, `get_rule_dependencies` — `GET /v1/rules/{id}[/sources|/dependencies]`
+- `get_rule`, `get_rule_sources`, `get_rule_dependencies` — `GET /v1/rules/{id}[/sources|/dependencies]`.
+  `get_rule` takes `as_of` (`YYYY-MM-DD` or `YYYY-MM`) for a point-in-time read.
+- `get_rule_versions` — `GET /v1/rules/{id}/versions` (every retained
+  (symbol, version) pair with its valid-time window, citation, and formula or
+  values; filter with `symbol` and `as_of`). Read the response's `coverage`
+  before reading anything into a gap: one retained version is not evidence
+  that a rule never changed.
 - `get_node` — `GET /v1/nodes/{legal_id}` (node detail with certification
   status; `certificate` is null unless the node is in a valid ledger)
 - `compose_graph` — `GET /v1/graph/compose?focus=` (dependency graph for any rule or file)
@@ -129,6 +147,9 @@ envelope, when there is one, is under `error.api_response`.
 Runtime
 
 - `list_runtime_packages`, `get_runtime_package` — `GET /v1/runtime/packages[/{j}/{p}]`
+- `get_package_graph` — `GET /v1/runtime/packages/{j}/{p}/graph` (the
+  package's rules, inputs, relations, and terminal outputs as a DAG from the
+  compiled artifact — how a program's outputs are computed)
 - `get_root_inputs` — `GET /v1/runtime/root-inputs?root=` (input catalog for any root)
 - `list_runtime_artifacts` — `GET /v1/runtime/artifacts` (pinned artifact identities)
 
@@ -201,7 +222,8 @@ https://api.axiom.org/v1/keys/trial`
 Recommended API key scopes:
 
 ```txt
-rules:read      get_capabilities, get_version, list_programs, search_rules, get_rule, get_node, list_certified_nodes, list_corpus_subtrees, list_runtime_packages, get_runtime_package, get_root_inputs, list_runtime_artifacts
+none            check_health, check_readiness, get_bundled_validation
+rules:read      get_capabilities, get_version, list_programs, list_variables, search_rules, get_rule, get_rule_versions, get_node, list_certified_nodes, list_corpus_subtrees, list_runtime_packages, get_runtime_package, get_package_graph, get_root_inputs, list_runtime_artifacts
 sources:read    get_rule_sources
 graphs:read     get_rule_dependencies, compose_graph, get_subgraph
 calculate:run   calculate_household, calculate_household_compat, calculate_batch, submit_calculation_job, get_calculation_job
@@ -237,6 +259,18 @@ npm run check
 npm pack --dry-run
 npm run smoke:github-install
 ```
+
+`npm run check` is hermetic. To check the tool surface against the deployed
+contract — no API key needed, since `GET /v1/openapi.json` is public:
+
+```sh
+npm run check:api-surface
+```
+
+It fails when the API serves a public route that
+[`src/api-surface.ts`](src/api-surface.ts) neither maps to a tool nor lists as
+deliberately unwrapped, and when the manifest names a route the API no longer
+serves. Add the tool, or the `UNWRAPPED_ROUTES` entry with its reason.
 
 Live smoke against the deployed API:
 

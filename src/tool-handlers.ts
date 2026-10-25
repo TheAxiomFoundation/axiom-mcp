@@ -29,9 +29,25 @@ export async function searchRules(
 
 export async function getRule(
   context: AxiomToolContext,
-  input: { rule_id: string }
+  input: { rule_id: string; as_of?: string }
 ): Promise<ToolResult> {
-  return runTool(() => context.client.getRule(input.rule_id));
+  // Only the query fields go to the client; rule_id belongs in the path, and
+  // withQuery would otherwise repeat it as a parameter.
+  return runTool(() =>
+    context.client.getRule(input.rule_id, { as_of: input.as_of })
+  );
+}
+
+export async function getRuleVersions(
+  context: AxiomToolContext,
+  input: { rule_id: string; symbol?: string; as_of?: string }
+): Promise<ToolResult> {
+  return runTool(() =>
+    context.client.getRuleVersions(input.rule_id, {
+      symbol: input.symbol,
+      as_of: input.as_of
+    })
+  );
 }
 
 export async function getRuleSources(
@@ -63,6 +79,15 @@ export async function getRuntimePackage(
   );
 }
 
+export async function getPackageGraph(
+  context: AxiomToolContext,
+  input: { jurisdiction: string; program_id: string }
+): Promise<ToolResult> {
+  return runTool(() =>
+    context.client.getPackageGraph(input.jurisdiction, input.program_id)
+  );
+}
+
 export async function listParityCases(
   context: AxiomToolContext
 ): Promise<ToolResult> {
@@ -84,6 +109,33 @@ export async function calculateHousehold(
 
 export async function getVersion(context: AxiomToolContext): Promise<ToolResult> {
   return runTool(() => context.client.getVersion());
+}
+
+export async function getHealth(context: AxiomToolContext): Promise<ToolResult> {
+  return runTool(() => context.client.getHealth());
+}
+
+export async function getReadiness(context: AxiomToolContext): Promise<ToolResult> {
+  return runTool(() => context.client.getReadiness());
+}
+
+export async function getBundledValidation(
+  context: AxiomToolContext
+): Promise<ToolResult> {
+  return runTool(() => context.client.getBundledValidation());
+}
+
+export async function listVariables(
+  context: AxiomToolContext,
+  input: {
+    jurisdiction?: string;
+    kind?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<ToolResult> {
+  return runTool(() => context.client.listVariables(input));
 }
 
 export async function listCertifiedNodes(

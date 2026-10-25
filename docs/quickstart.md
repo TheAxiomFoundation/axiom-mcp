@@ -100,7 +100,8 @@ Run the Axiom parity cases and summarize any differences.
 
 `calculate_household` takes three addressing modes. The simplest names no
 package and no root: send the `variables` you want plus what you know, and
-the API resolves each variable to whatever can serve it.
+the API resolves each variable to whatever can serve it. Use `list_variables`
+to find the variable names, filtering by `jurisdiction` or `q`.
 
 ```json
 {
@@ -126,18 +127,24 @@ then pass `root` and `facts`.
 
 - `get_capabilities`
 - `get_version`
+- `check_health`
+- `check_readiness`
 - `list_programs`
+- `list_variables`
 - `list_certified_nodes`
 - `list_corpus_subtrees`
+- `get_bundled_validation`
 - `search_rules`
 - `get_rule`
 - `get_rule_sources`
 - `get_rule_dependencies`
+- `get_rule_versions`
 - `get_node`
 - `compose_graph`
 - `get_subgraph`
 - `list_runtime_packages`
 - `get_runtime_package`
+- `get_package_graph`
 - `get_root_inputs`
 - `list_runtime_artifacts`
 - `list_parity_cases`
