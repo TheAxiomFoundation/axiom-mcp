@@ -27,6 +27,7 @@
     "test": "vitest run",
     "mcp": "tsx src/index.ts",
     "smoke:github-install": "tsx scripts/smoke-github-install.ts",
+    "check:api-surface": "tsx scripts/check-api-surface.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
     "prepare": "npm run build",
     "check": "npm run build && npm test"

@@ -78,6 +78,30 @@ export class AxiomApiClient {
     return this.request("GET", "/v1/version");
   }
 
+  getHealth() {
+    return this.request("GET", "/v1/health");
+  }
+
+  getReadiness() {
+    return this.request("GET", "/v1/ready");
+  }
+
+  getBundledValidation() {
+    return this.request("GET", "/v1/public/validation/bundled");
+  }
+
+  listVariables(
+    input: {
+      jurisdiction?: string;
+      kind?: string;
+      q?: string;
+      limit?: number;
+      offset?: number;
+    } = {}
+  ) {
+    return this.request("GET", withQuery("/v1/variables", input));
+  }
+
   listCertifiedNodes(input: { limit?: number; offset?: number } = {}) {
     return this.request("GET", withQuery("/v1/certified", input));
   }
@@ -127,8 +151,21 @@ export class AxiomApiClient {
     return this.request("GET", "/v1/programs");
   }
 
-  getRule(ruleId: string) {
-    return this.request("GET", `/v1/rules/${encodeRuleId(ruleId)}`);
+  getRule(ruleId: string, input: { as_of?: string } = {}) {
+    return this.request(
+      "GET",
+      withQuery(`/v1/rules/${encodeRuleId(ruleId)}`, input)
+    );
+  }
+
+  getRuleVersions(
+    ruleId: string,
+    input: { symbol?: string; as_of?: string } = {}
+  ) {
+    return this.request(
+      "GET",
+      withQuery(`/v1/rules/${encodeRuleId(ruleId)}/versions`, input)
+    );
   }
 
   getRuleSources(ruleId: string) {
@@ -147,6 +184,13 @@ export class AxiomApiClient {
     return this.request(
       "GET",
       `/v1/runtime/packages/${encodeURIComponent(jurisdiction)}/${encodeURIComponent(programId)}`
+    );
+  }
+
+  getPackageGraph(jurisdiction: string, programId: string) {
+    return this.request(
+      "GET",
+      `/v1/runtime/packages/${encodeURIComponent(jurisdiction)}/${encodeURIComponent(programId)}/graph`
     );
   }
 

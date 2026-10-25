@@ -330,4 +330,45 @@ describe("AxiomApiClient", () => {
       }
     ]);
   });
+  it("calls the catalog, version-history, package-graph, and probe routes", async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), method: init?.method });
+        return Response.json({ status: "ok", data: {} });
+      }
+    });
+
+    await client.listVariables({ jurisdiction: "us-co", kind: "output", q: "snap", limit: 50 });
+    await client.listVariables();
+    await client.getRule("us-co.snap", { as_of: "2026-01" });
+    await client.getRuleVersions("us-co.snap", { symbol: "allotment", as_of: "2026-01-01" });
+    await client.getRuleVersions("us-co.snap");
+    await client.getPackageGraph("us-co", "co-snap");
+    await client.getBundledValidation();
+    await client.getHealth();
+    await client.getReadiness();
+
+    expect(calls).toEqual([
+      {
+        url: "https://api.example.test/v1/variables?jurisdiction=us-co&kind=output&q=snap&limit=50",
+        method: "GET"
+      },
+      { url: "https://api.example.test/v1/variables", method: "GET" },
+      { url: "https://api.example.test/v1/rules/us-co.snap?as_of=2026-01", method: "GET" },
+      {
+        url: "https://api.example.test/v1/rules/us-co.snap/versions?symbol=allotment&as_of=2026-01-01",
+        method: "GET"
+      },
+      { url: "https://api.example.test/v1/rules/us-co.snap/versions", method: "GET" },
+      {
+        url: "https://api.example.test/v1/runtime/packages/us-co/co-snap/graph",
+        method: "GET"
+      },
+      { url: "https://api.example.test/v1/public/validation/bundled", method: "GET" },
+      { url: "https://api.example.test/v1/health", method: "GET" },
+      { url: "https://api.example.test/v1/ready", method: "GET" }
+    ]);
+  });
 });

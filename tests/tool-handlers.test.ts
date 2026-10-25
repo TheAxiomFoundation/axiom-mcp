@@ -3,9 +3,12 @@ import { AxiomApiClient } from "../src/axiom-client.js";
 import {
   calculateHousehold,
   getCapabilities,
+  getPackageGraph,
   getRule,
+  getRuleVersions,
   getRuntimePackage,
   listParityCases,
+  listVariables,
   runParityCases,
   searchRules
 } from "../src/tool-handlers.js";
@@ -150,6 +153,40 @@ describe("tool handlers", () => {
     expect(calls).toEqual([
       "https://api.example.test/v1/parity/cases",
       "https://api.example.test/v1/parity/run"
+    ]);
+  });
+  it("keeps path arguments out of the query string", async () => {
+    // rule_id belongs in the path. Handing the whole tool input to the
+    // client repeats it as a query parameter, which the API answers with
+    // 404 unknown_endpoint.
+    const urls: string[] = [];
+    const client = new AxiomApiClient({
+      baseUrl: "https://api.example.test",
+      fetchImpl: async (url) => {
+        urls.push(String(url));
+        return Response.json({ status: "ok", data: {} });
+      }
+    });
+    const context = { client };
+
+    await getRule(context, { rule_id: "us-co/snap", as_of: "2026-01" });
+    await getRule(context, { rule_id: "us-co/snap" });
+    await getRuleVersions(context, {
+      rule_id: "us-co/snap",
+      symbol: "allotment",
+      as_of: "2026-01-01"
+    });
+    await getRuleVersions(context, { rule_id: "us-co/snap" });
+    await getPackageGraph(context, { jurisdiction: "us-co", program_id: "co-snap" });
+    await listVariables(context, { kind: "output", limit: 5 });
+
+    expect(urls).toEqual([
+      "https://api.example.test/v1/rules/us-co/snap?as_of=2026-01",
+      "https://api.example.test/v1/rules/us-co/snap",
+      "https://api.example.test/v1/rules/us-co/snap/versions?symbol=allotment&as_of=2026-01-01",
+      "https://api.example.test/v1/rules/us-co/snap/versions",
+      "https://api.example.test/v1/runtime/packages/us-co/co-snap/graph",
+      "https://api.example.test/v1/variables?kind=output&limit=5"
     ]);
   });
 });
