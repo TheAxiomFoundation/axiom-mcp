@@ -45,8 +45,15 @@ const apiKey = process.env.AXIOM_API_KEY || "";
 if (!apiKey) {
   throw new Error("AXIOM_API_KEY is required for the prompt eval.");
 }
+// Not a hard check on ANTHROPIC_API_KEY: the SDK also resolves an
+// `ant auth login` profile, so an unset variable does not mean there is no
+// credential. A machine with a profile and no variable must still run. If
+// there is really no credential, the SDK raises its own authentication error
+// on the first model call.
 if (!process.env.ANTHROPIC_API_KEY) {
-  throw new Error("ANTHROPIC_API_KEY is required for the prompt eval.");
+  console.log(
+    "ANTHROPIC_API_KEY is unset; the SDK will look for an `ant auth login` profile."
+  );
 }
 
 const anthropic = new Anthropic();
