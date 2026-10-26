@@ -147,3 +147,43 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
+
+/**
+ * The smallest computed value a text check can speak for.
+ *
+ * Below it the digits turn up in an unrelated part of an answer — a count, an
+ * age, a line number — so a pass would say nothing about the prompt. A case
+ * whose value falls short skips instead of claiming a pass.
+ */
+export const SMALLEST_CHECKABLE_VALUE = 100;
+
+export type CheckableValue =
+  | { ok: true; value: number }
+  | { ok: false; reason: string };
+
+/** Is this computed value specific enough to require in an answer? */
+export function checkableValue(value: number | undefined): CheckableValue {
+  if (value === undefined) {
+    return { ok: false, reason: "returned no numeric value to check against" };
+  }
+  if (Math.abs(value) < SMALLEST_CHECKABLE_VALUE) {
+    return {
+      ok: false,
+      reason: `computes ${value}, which an unrelated answer contains by accident`
+    };
+  }
+  return { ok: true, value };
+}
+
+/**
+ * Does the answer report this number, rather than merely hold its digits?
+ *
+ * The digits must stand as a number of their own: 339 does not count inside
+ * 1339, nor as the decimals of 0.339. Separators between digits come out
+ * first, so an answer of "12,345" reports 12345.
+ */
+export function reportsNumber(text: string, expected: number): boolean {
+  const digits = String(Math.trunc(Math.abs(expected)));
+  const normalized = text.replace(/(?<=\d)[,_](?=\d)/g, "");
+  return new RegExp(`(?<![\\d.])${digits}(?![\\d])`).test(normalized);
+}

@@ -11,9 +11,11 @@ import {
   asString,
   collectObjects,
   findObject,
+  checkableValue,
   firstNumericValue,
   firstSubtreeRoot,
   removeOneLeaf,
+  reportsNumber,
   sampleFactsFrom
 } from "./eval-fixtures.js";
 
@@ -72,11 +74,35 @@ interface CaseResult {
   readonly costUsd: number;
 }
 
+/**
+ * The runtime-package fixture, cached across the cases that share it.
+ *
+ * It is declared above the run block on purpose. The cases run from there,
+ * so the same `let` further down the file is still in its temporal dead
+ * zone when `firstPackageWithSample` reads it, and the second case dies
+ * with a ReferenceError before it grades anything.
+ */
+let packageFixture: PackageFixture | undefined;
+
+type CaseBuilder = (name: string) => Promise<CaseResult>;
+
+/**
+ * Each prompt under test, with the case that grades it. The names are the
+ * server's own prompt names, so `report` can name a contract that no case
+ * covers.
+ */
+const CASES: ReadonlyArray<readonly [string, CaseBuilder]> = [
+  ["calculate_variable_for_household", variableCase],
+  ["trace_household_result", traceCase],
+  ["find_missing_household_inputs", missingInputsCase],
+  ["run_corpus_subtree", subtreeCase]
+];
+
 const results: CaseResult[] = [];
 
 try {
-  for (const build of [variableCase, traceCase, missingInputsCase, subtreeCase]) {
-    results.push(await build());
+  for (const [name, build] of CASES) {
+    results.push(await runCase(name, build));
   }
 } finally {
   await driver.close();
@@ -137,8 +163,7 @@ function selectDriver(): PromptDriver {
  * for a fact no serving target reads, so an unreported `ignored_inputs` is an
  * answer that looks computed from the user's facts and was not.
  */
-async function variableCase(): Promise<CaseResult> {
-  const name = "calculate_variable_for_household";
+async function variableCase(name: string): Promise<CaseResult> {
   const document = await fetch(`${baseUrl}/v1/openapi.json`).then((response) =>
     response.json()
   );
@@ -165,12 +190,9 @@ async function variableCase(): Promise<CaseResult> {
   }
 
   const direct = await callTool("calculate_household", example.request);
-  const expected = firstNumericValue(direct);
-  if (expected === undefined || expected === 0) {
-    return skipped(
-      name,
-      `${example.variable} produced no nonzero value to check against`
-    );
+  const expected = checkableValue(firstNumericValue(direct));
+  if (!expected.ok) {
+    return skipped(name, `${example.variable} ${expected.reason}`);
   }
   const ignored = collectObjects(direct, "ignored_inputs")
     .map((entry) => asString(entry.field))
@@ -186,15 +208,10 @@ async function variableCase(): Promise<CaseResult> {
   );
   if (!run.ok) return failed(name, run.reason, run);
 
-  const digits = String(Math.trunc(expected));
   const checks: Check[] = [
     toolCheck(run.toolsCalled, "list_variables"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    {
-      name: "reports the computed value",
-      ok: run.text.includes(digits),
-      detail: `expected the answer to contain ${digits}`
-    }
+    valueCheck(run.text, expected.value)
   ];
   if (ignored.length > 0) {
     checks.push({
@@ -211,23 +228,16 @@ async function variableCase(): Promise<CaseResult> {
  * The answer is checkable: this calls the same tool first and requires the
  * model to report the number the API returned.
  */
-async function traceCase(): Promise<CaseResult> {
-  const name = "trace_household_result";
+async function traceCase(name: string): Promise<CaseResult> {
   const pkg = await firstPackageWithSample();
   if (!pkg.ok) return skipped(name, pkg.reason);
 
   const direct = await callTool("calculate_household", pkg.sampleRequest);
-  const expected = firstNumericValue(direct);
-  if (expected === undefined) {
+  const expected = checkableValue(firstNumericValue(direct));
+  if (!expected.ok) {
     return skipped(
       name,
-      `calculate_household on ${pkg.jurisdiction}/${pkg.programId} returned no numeric value to check against`
-    );
-  }
-  if (expected === 0) {
-    return skipped(
-      name,
-      `${pkg.jurisdiction}/${pkg.programId} computes 0, which any answer contains by accident`
+      `${pkg.jurisdiction}/${pkg.programId} ${expected.reason}`
     );
   }
 
@@ -238,15 +248,10 @@ async function traceCase(): Promise<CaseResult> {
   );
   if (!run.ok) return failed(name, run.reason, run);
 
-  const digits = String(Math.trunc(expected));
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_runtime_package"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    {
-      name: "reports the computed value",
-      ok: run.text.includes(digits),
-      detail: `expected the answer to contain ${digits}`
-    }
+    valueCheck(run.text, expected.value)
   ]);
 }
 
@@ -255,8 +260,7 @@ async function traceCase(): Promise<CaseResult> {
  * household lacks. One leaf fact is removed from the package's own sample
  * request, so the field the model must name is known exactly.
  */
-async function missingInputsCase(): Promise<CaseResult> {
-  const name = "find_missing_household_inputs";
+async function missingInputsCase(name: string): Promise<CaseResult> {
   const pkg = await firstPackageWithSample();
   if (!pkg.ok) return skipped(name, pkg.reason);
 
@@ -284,8 +288,7 @@ async function missingInputsCase(): Promise<CaseResult> {
  * Root mode. Same shape as the trace case: discover a subtree, compute its
  * output directly, then require the model to reach it from the prompt.
  */
-async function subtreeCase(): Promise<CaseResult> {
-  const name = "run_corpus_subtree";
+async function subtreeCase(name: string): Promise<CaseResult> {
   const subtrees = await callTool("list_corpus_subtrees", {});
   const root = firstSubtreeRoot(subtrees);
   if (!root) return skipped(name, "list_corpus_subtrees returned no root");
@@ -298,26 +301,18 @@ async function subtreeCase(): Promise<CaseResult> {
     root,
     facts: facts.facts
   });
-  const expected = firstNumericValue(direct);
-  if (expected === undefined || expected === 0) {
-    return skipped(
-      name,
-      `${root} produced no nonzero numeric output to check against`
-    );
+  const expected = checkableValue(firstNumericValue(direct));
+  if (!expected.ok) {
+    return skipped(name, `${root} ${expected.reason}`);
   }
 
   const run = await runPrompt(name, { root }, `My facts are: ${JSON.stringify(facts.facts)}`);
   if (!run.ok) return failed(name, run.reason, run);
 
-  const digits = String(Math.trunc(expected));
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_root_inputs"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    {
-      name: "reports the computed value",
-      ok: run.text.includes(digits),
-      detail: `expected the answer to contain ${digits}`
-    }
+    valueCheck(run.text, expected.value)
   ]);
 }
 
@@ -362,8 +357,6 @@ type PackageFixture =
     }
   | { ok: false; reason: string };
 
-let packageFixture: PackageFixture | undefined;
-
 /**
  * The first runtime package that publishes a sample request. Discovered
  * rather than hard-coded, so the eval follows what the API actually serves.
@@ -391,6 +384,16 @@ async function firstPackageWithSample(): Promise<PackageFixture> {
     reason: "no runtime package published a sample_request"
   };
   return packageFixture;
+}
+
+/** Requires the answer to report the number the API computed. */
+function valueCheck(text: string, expected: number): Check {
+  const digits = String(Math.trunc(Math.abs(expected)));
+  return {
+    name: "reports the computed value",
+    ok: reportsNumber(text, expected),
+    detail: `expected the answer to report ${digits} as its own number`
+  };
 }
 
 function toolCheck(called: Set<string>, tool: string): Check {
@@ -424,6 +427,28 @@ function failed(prompt: string, reason: string, run: RunOutcome): CaseResult {
     iterations: run.iterations,
     costUsd: run.costUsd
   };
+}
+
+/**
+ * Runs one case, and turns a thrown setup failure into a skip.
+ *
+ * Only the harness throws here: a tool call the API refuses, or a prompt
+ * the server will not render. Letting it escape ends the whole run, which
+ * loses every case already graded and the model calls they cost. One
+ * endpoint answering 503 must not erase three results.
+ */
+async function runCase(
+  name: string,
+  build: CaseBuilder
+): Promise<CaseResult> {
+  try {
+    return await build(name);
+  } catch (error) {
+    return skipped(
+      name,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
 }
 
 function skipped(prompt: string, reason: string): CaseResult {

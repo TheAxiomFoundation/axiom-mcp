@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkableValue,
   firstNumericValue,
   firstSubtreeRoot,
   removeOneLeaf,
+  reportsNumber,
   sampleFactsFrom
 } from "../scripts/eval-fixtures.js";
 
@@ -129,5 +131,66 @@ describe("firstSubtreeRoot", () => {
 
   it("returns undefined for an empty list", () => {
     expect(firstSubtreeRoot({ data: { subtrees: [] } })).toBeUndefined();
+  });
+});
+
+describe("checkableValue", () => {
+  // A check the answer passes by accident is worse than no check: it reports
+  // a prompt as working on evidence that says nothing.
+  it("accepts a value with enough digits to be specific", () => {
+    expect(checkableValue(339)).toEqual({ ok: true, value: 339 });
+  });
+
+  it("refuses a missing value", () => {
+    expect(checkableValue(undefined)).toEqual({
+      ok: false,
+      reason: "returned no numeric value to check against"
+    });
+  });
+
+  it("refuses a single digit, which prose contains by accident", () => {
+    const result = checkableValue(9);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toContain("computes 9");
+  });
+
+  it("refuses zero", () => {
+    expect(checkableValue(0).ok).toBe(false);
+  });
+
+  it("judges a negative value by its size", () => {
+    expect(checkableValue(-42).ok).toBe(false);
+    expect(checkableValue(-339)).toEqual({ ok: true, value: -339 });
+  });
+});
+
+describe("reportsNumber", () => {
+  it("finds the number in prose", () => {
+    expect(reportsNumber("You receive $339 per month.", 339)).toBe(true);
+  });
+
+  it("ignores separators the answer puts between digits", () => {
+    expect(reportsNumber("The total is 12,345 dollars.", 12345)).toBe(true);
+  });
+
+  it("rejects the digits inside a longer number", () => {
+    expect(reportsNumber("Your case id is 1339.", 339)).toBe(false);
+    expect(reportsNumber("Totals: 3390 and 11200.", 339)).toBe(false);
+  });
+
+  it("rejects the digits after a decimal point", () => {
+    expect(reportsNumber("The rate is 0.339 per unit.", 339)).toBe(false);
+  });
+
+  it("accepts the number with its own decimals after it", () => {
+    expect(reportsNumber("You receive 339.42 per month.", 339)).toBe(true);
+  });
+
+  it("matches a negative value by its digits", () => {
+    expect(reportsNumber("A deduction of -339 applies.", -339)).toBe(true);
+  });
+
+  it("rejects an answer with no number at all", () => {
+    expect(reportsNumber("I could not compute that.", 339)).toBe(false);
   });
 });
