@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { AxiomApiClient } from "../src/axiom-client.js";
+import { nativeExampleFromOpenApi } from "./native-request.js";
 import {
   describeParityReview,
   reviewParityRun
@@ -214,6 +215,50 @@ try {
     }
   }
 
+  // Variable-addressed calculation: no program_id, no root — the API
+  // resolves `variables` through the catalog and routes the facts itself.
+  // Nothing else here reaches that path. The batch and job calls send the
+  // package's own sample_request, which is package mode, so a regression in
+  // catalog resolution or fact routing would ship unnoticed.
+  //
+  // The request is the API's own published example for the mode (see
+  // ./native-request.ts), so this pins no facts of its own and fails if the
+  // example a reader of the docs would copy stops working.
+  const specResponse = await fetch(`${baseUrl}/v1/openapi.json`, {
+    headers: { accept: "application/json" }
+  });
+  if (!specResponse.ok) {
+    throw new Error(
+      `could not read ${baseUrl}/v1/openapi.json: HTTP ${specResponse.status}`
+    );
+  }
+  const example = nativeExampleFromOpenApi(await specResponse.json());
+  if (!example.ok) {
+    throw new Error(`no variable-addressed example to smoke: ${example.reason}`);
+  }
+  const native = await client.callTool({
+    name: "calculate_household",
+    arguments: example.request
+  });
+  if (native.isError) {
+    const code = readPath<string>(native.structuredContent, [
+      "error",
+      "api_response",
+      "error",
+      "code"
+    ]);
+    if (code !== "insufficient_scope") {
+      throw new Error(
+        `variable-addressed calculate_household failed with ${JSON.stringify(code)}: ${JSON.stringify(native.structuredContent).slice(0, 400)}`
+      );
+    }
+    console.log(
+      "variable-addressed calculation skipped: smoke key lacks calculate:run"
+    );
+  } else {
+    assertVariableAddressed(native.structuredContent, example.variable);
+  }
+
   // Async job flow: submit one calculation as a detached job and poll it to
   // completion, proving durable job persistence across instances. Skips
   // cleanly alongside calculate_batch when the key lacks calculate:run.
@@ -276,6 +321,67 @@ try {
 } finally {
   await client.close();
   await server.close();
+}
+
+/**
+ * A variable-addressed response has to show its work: the variable resolved
+ * to a target and computed, and every fact sent was understood.
+ *
+ * `unsupported` is a quiet failure: a variable nothing can serve lands
+ * there and the request still answers 200, so a 200 alone proves nothing.
+ * That fails the smoke.
+ *
+ * `ignored_inputs` is reported, not failed. A fact no serving target
+ * declares lands there and the answer is computed without it — worth
+ * seeing, but today the API's own published example trips it (`people.*.age`
+ * reaches no target that declares a person input named `age`), so failing
+ * on it would hold this monitor red for something upstream. Logged every
+ * run instead, so a growing list stays visible.
+ */
+function assertVariableAddressed(content: unknown, variable: string) {
+  const data = readPath<Record<string, unknown>>(content, ["data"]);
+  if (!data) {
+    throw new Error("variable-addressed calculation returned no data");
+  }
+  const computed = data.computed;
+  const unsupported = Array.isArray(data.unsupported) ? data.unsupported : [];
+  const ignored = Array.isArray(data.ignored_inputs) ? data.ignored_inputs : [];
+  if (!Array.isArray(computed) || !Array.isArray(data.native_request)) {
+    throw new Error(
+      `variable-addressed calculation did not return that mode's shape: ${JSON.stringify(data).slice(0, 300)}`
+    );
+  }
+  const refused = unsupported.find(
+    (row) => readField(row, "variable") === variable
+  );
+  if (refused) {
+    throw new Error(
+      `${variable} was unsupported: ${String(readField(refused, "reason"))}`
+    );
+  }
+  const row = computed.find((entry) => readField(entry, "variable") === variable);
+  if (!row) {
+    throw new Error(
+      `${variable} was neither computed nor reported unsupported: ${JSON.stringify(data).slice(0, 300)}`
+    );
+  }
+  const value = readField(row, "value");
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(
+      `${variable} computed a non-numeric value: ${JSON.stringify(value)}`
+    );
+  }
+  if (!readField(row, "served_by")) {
+    throw new Error(`${variable} computed without served_by provenance`);
+  }
+  console.log(
+    `Variable-addressed: ${variable} = ${value} for period ${String(data.period)}, served by ${JSON.stringify(readField(row, "served_by"))}`
+  );
+  for (const entry of ignored) {
+    console.log(
+      `Variable-addressed ignored input: ${String(readField(entry, "field"))} — ${String(readField(entry, "reason"))}`
+    );
+  }
 }
 
 function assertIncludes(values: string[], expected: string, label: string) {
