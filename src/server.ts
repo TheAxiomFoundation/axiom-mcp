@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AxiomApiError } from "./axiom-client.js";
+import {
+  PROMPT_CONTRACTS,
+  renderPrompt
+} from "./prompt-contract.js";
+
 import type { AxiomApiClient } from "./axiom-client.js";
 import {
   calculateBatch,
@@ -514,107 +519,29 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     async (input) => getCalculationJob(context, input)
   );
 
-  server.registerPrompt(
-    "explain_rule_for_caseworker",
-    {
-      title: "Explain rule for caseworker",
-      description:
-        "Guide an agent to retrieve sources and explain an encoded rule in operational language.",
-      argsSchema: {
-        rule_id: z.string().min(1)
-      }
-    },
-    async ({ rule_id }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Use get_rule and get_rule_sources for ${rule_id}. ` +
-              "Explain what the rule does, when it applies, what facts it needs, and cite source references from the API response. Avoid giving legal advice."
+  // Prompts come from the contract module so each one's tool names are
+  // declared data, not prose a tool rename can silently invalidate.
+  for (const contract of PROMPT_CONTRACTS) {
+    server.registerPrompt(
+      contract.name,
+      {
+        title: contract.title,
+        description: contract.description,
+        argsSchema: contract.args
+      },
+      async (args) => ({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: renderPrompt(contract, args as Record<string, string>)
+            }
           }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "trace_household_result",
-    {
-      title: "Trace household result",
-      description:
-        "Guide an agent to calculate a household and explain the output trace.",
-      argsSchema: {
-        program_id: z.string().min(1),
-        jurisdiction: z.string().min(1)
-      }
-    },
-    async ({ program_id, jurisdiction }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Use get_runtime_package for ${jurisdiction}/${program_id}, then calculate_household with the user's household facts. ` +
-              "Explain each requested output from the returned trace, including rule ids and warnings."
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "run_corpus_subtree",
-    {
-      title: "Run any corpus subtree on demand",
-      description:
-        "Guide an agent to discover a subtree's inputs and execute it with calculate_household in root mode.",
-      argsSchema: {
-        root: z.string().min(1)
-      }
-    },
-    async ({ root }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Use get_root_inputs for root ${root} to learn its typed inputs, then call calculate_household with { root: "${root}", facts: {...} } using the user's facts. ` +
-              "Explain each output from the returned trace, including rule ids and warnings. Use compose_graph on the root if the user asks how the rules connect."
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "find_missing_household_inputs",
-    {
-      title: "Find missing household inputs",
-      description:
-        "Guide an agent to compare a package input schema with supplied household facts.",
-      argsSchema: {
-        program_id: z.string().min(1),
-        jurisdiction: z.string().min(1)
-      }
-    },
-    async ({ program_id, jurisdiction }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Use get_runtime_package for ${jurisdiction}/${program_id}. ` +
-              "Compare the package entities, inputs, aliases, defaults, and sample request with the user's household. Return only missing or ambiguous facts needed for a reliable calculation."
-          }
-        }
-      ]
-    })
-  );
+        ]
+      })
+    );
+  }
 
   return server;
 }

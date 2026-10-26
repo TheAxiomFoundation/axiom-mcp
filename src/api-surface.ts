@@ -42,6 +42,14 @@ export const WRAPPED_ROUTES: Readonly<Record<string, string>> = {
   "POST /v1/parity/run": "run_parity_cases"
 };
 
+// Every tool the server registers, derived from the manifest above so the
+// prompt contract and the manifest cannot disagree about what a tool is
+// called. `tests/api-surface.test.ts` holds the manifest against the server's
+// real registrations, which is what makes this set authoritative.
+export const TOOL_NAMES: ReadonlySet<string> = new Set(
+  Object.values(WRAPPED_ROUTES)
+);
+
 // Public routes that are deliberately not tools. Each needs a reason, because
 // the drift check reads silence as drift.
 export const UNWRAPPED_ROUTES: Readonly<Record<string, string>> = {

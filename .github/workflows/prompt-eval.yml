@@ -1,0 +1,43 @@
+name: Prompt Eval
+
+# This spends money on model calls, so it is not part of CI and not part of
+# the 30-minute live smoke. Once a day, and on demand.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "19 6 * * *"
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Check prompt eval configuration
+        id: config
+        env:
+          BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
+          AXIOM_KEY: ${{ secrets.AXIOM_API_KEY }}
+          MODEL_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$AXIOM_KEY" ] || [ -z "$MODEL_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Prompt eval skipped: needs the AXIOM_API_BASE_URL variable and the AXIOM_API_KEY and ANTHROPIC_API_KEY secrets."
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run the prompt eval
+        if: steps.config.outputs.configured == 'true'
+        env:
+          AXIOM_API_BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
+          AXIOM_API_KEY: ${{ secrets.AXIOM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run eval:prompts

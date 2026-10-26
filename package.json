@@ -28,6 +28,7 @@
     "mcp": "tsx src/index.ts",
     "smoke:github-install": "tsx scripts/smoke-github-install.ts",
     "check:api-surface": "tsx scripts/check-api-surface.ts",
+    "eval:prompts": "tsx scripts/eval-prompts.ts",
     "smoke:live": "tsx scripts/smoke-live.ts",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.check.json",
@@ -48,6 +49,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@types/node": "^24.10.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",

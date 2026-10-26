@@ -1,0 +1,149 @@
+// Fixture logic for `eval-prompts.ts`, in its own module so it can be tested
+// without an API key or a model call. These functions decide whether an eval
+// case runs or is skipped, so a quiet mistake here would turn a real failure
+// into a skip that reads as "nothing to grade".
+
+export type FactsFixture =
+  | { ok: true; facts: Record<string, unknown> }
+  | { ok: false; reason: string };
+
+/**
+ * Builds a facts object from a root's typed inputs, filling each declared
+ * input with a value its type accepts.
+ */
+export function sampleFactsFrom(inputs: unknown): FactsFixture {
+  const rows = collectObjects(inputs, "inputs");
+  if (rows.length === 0) return { ok: false, reason: "declared no inputs" };
+  const facts: Record<string, unknown> = {};
+  for (const row of rows) {
+    const field = asString(row.name ?? row.id ?? row.field);
+    if (!field) continue;
+    const type = (asString(row.type ?? row.value_type) ?? "number").toLowerCase();
+    if (type.includes("bool")) facts[field] = false;
+    else if (type.includes("str") || type.includes("enum")) {
+      const allowed = Array.isArray(row.allowed_values)
+        ? row.allowed_values
+        : undefined;
+      if (!allowed || allowed.length === 0) {
+        return { ok: false, reason: `input ${field} has no value this eval can supply` };
+      }
+      facts[field] = allowed[0];
+    } else facts[field] = 1;
+  }
+  if (Object.keys(facts).length === 0) {
+    return { ok: false, reason: "no input had a usable name" };
+  }
+  return { ok: true, facts };
+}
+
+export type RemovedLeaf =
+  | { ok: true; request: Record<string, unknown>; field: string }
+  | { ok: false; reason: string };
+
+/**
+ * Removes one leaf fact from a sample request. The sample is a complete
+ * request by construction, so whatever is removed is a fact the package
+ * expects — which is what makes the check exact.
+ */
+export function removeOneLeaf(request: Record<string, unknown>): RemovedLeaf {
+  const copy = structuredClone(request) as Record<string, unknown>;
+  const path = findLeafPath(copy, []);
+  if (!path) return { ok: false, reason: "sample request had no leaf fact to remove" };
+  let parent: Record<string, unknown> = copy;
+  for (const key of path.slice(0, -1)) {
+    parent = parent[key] as Record<string, unknown>;
+  }
+  const field = path[path.length - 1]!;
+  delete parent[field];
+  return { ok: true, request: copy, field };
+}
+
+/** The first scalar leaf that is not a request-shaping field. */
+export function findLeafPath(
+  value: unknown,
+  path: string[]
+): string[] | undefined {
+  if (!isRecord(value)) return undefined;
+  for (const [key, child] of Object.entries(value)) {
+    // These select the mode and the outputs rather than describe the
+    // household, so removing one would change the request, not starve it.
+    if (["program_id", "jurisdiction", "root", "variables", "period"].includes(key)) {
+      continue;
+    }
+    if (typeof child === "number" || typeof child === "boolean") {
+      return [...path, key];
+    }
+    if (isRecord(child)) {
+      const found = findLeafPath(child, [...path, key]);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The first finite number under a key named `value`, which is how both
+ * addressing modes report a computed output.
+ */
+export function firstNumericValue(value: unknown): number | undefined {
+  if (isRecord(value)) {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "value" && typeof child === "number" && Number.isFinite(child)) {
+        return child;
+      }
+      const found = firstNumericValue(child);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = firstNumericValue(entry);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
+export function collectObjects(value: unknown, key: string): Record<string, unknown>[] {
+  const found = findValue(value, key);
+  return Array.isArray(found) ? found.filter(isRecord) : [];
+}
+
+export function findObject(value: unknown, key: string): Record<string, unknown> | undefined {
+  const found = findValue(value, key);
+  return isRecord(found) ? found : undefined;
+}
+
+export function firstSubtreeRoot(value: unknown): string | undefined {
+  for (const row of collectObjects(value, "subtrees")) {
+    const found = asString(row.root);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export function findValue(value: unknown, key: string): unknown {
+  if (isRecord(value)) {
+    if (key in value) return value[key];
+    for (const child of Object.values(value)) {
+      const found = findValue(child, key);
+      if (found !== undefined) return found;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findValue(entry, key);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
