@@ -10,6 +10,7 @@ on:
 jobs:
   eval:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
@@ -20,24 +21,43 @@ jobs:
 
       - run: npm ci
 
+      # Two ways to reach a model, and the eval grades the same prompts the
+      # same way through either. The CLI login is preferred because it needs
+      # no API key; an API key is used only when there is no CLI token.
       - name: Check prompt eval configuration
         id: config
         env:
           BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
           AXIOM_KEY: ${{ secrets.AXIOM_API_KEY }}
+          CLI_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           MODEL_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$BASE_URL" ] || [ -z "$AXIOM_KEY" ] || [ -z "$MODEL_KEY" ]; then
+          if [ -z "$BASE_URL" ] || [ -z "$AXIOM_KEY" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Prompt eval skipped: needs the AXIOM_API_BASE_URL variable and the AXIOM_API_KEY and ANTHROPIC_API_KEY secrets."
+            echo "Prompt eval skipped: needs the AXIOM_API_BASE_URL variable and the AXIOM_API_KEY secret."
+            exit 0
+          fi
+          if [ -n "$CLI_TOKEN" ]; then
+            echo "driver=cli" >> "$GITHUB_OUTPUT"
+          elif [ -n "$MODEL_KEY" ]; then
+            echo "driver=sdk" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Prompt eval skipped: needs a model credential — the CLAUDE_CODE_OAUTH_TOKEN secret (from \`claude setup-token\`), or the ANTHROPIC_API_KEY secret."
             exit 0
           fi
           echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install the Claude Code CLI
+        if: steps.config.outputs.driver == 'cli'
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: Run the prompt eval
         if: steps.config.outputs.configured == 'true'
         env:
           AXIOM_API_BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
           AXIOM_API_KEY: ${{ secrets.AXIOM_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AXIOM_EVAL_DRIVER: ${{ steps.config.outputs.driver }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ steps.config.outputs.driver == 'sdk' && secrets.ANTHROPIC_API_KEY || '' }}
         run: npm run eval:prompts

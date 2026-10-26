@@ -1,9 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { AxiomApiClient } from "../src/axiom-client.js";
 import { PROMPT_CONTRACTS } from "../src/prompt-contract.js";
 import { createAxiomMcpServer } from "../src/server.js";
+import { EVAL_MODEL, type PromptDriver, type RunOutcome } from "./eval-driver.js";
+import { createCliDriver } from "./eval-driver-cli.js";
+import { createSdkDriver } from "./eval-driver-sdk.js";
 import { nativeExampleFromOpenApi } from "./native-request.js";
 import {
   asString,
@@ -29,16 +31,11 @@ import {
 // checkable answer — `explain_rule_for_caseworker` asks for an explanation —
 // there is no case, rather than a check that only looks like one.
 //
-// This costs money per run. It is not in the 30-minute smoke; see
-// `.github/workflows/prompt-eval.yml`.
-
-const MODEL = "claude-opus-5-5";
-// Each iteration is one model call. The cap bounds the spend of a run that
-// loops instead of answering; hitting it fails the case.
-const MAX_ITERATIONS = 8;
-const MAX_TOKENS = 8000;
-// Per million tokens, for the run's cost line.
-const PRICE_PER_TOKEN = { input: 4 / 1_000_000, output: 20 / 1_000_000 };
+// Two drivers can carry the model side, and they grade the same text the same
+// way. `AXIOM_EVAL_DRIVER=cli` (the default) runs the Claude Code CLI, which
+// needs no Anthropic API key. `AXIOM_EVAL_DRIVER=sdk` calls the Anthropic API
+// and bills a key per token. Either way the run costs something; this is not
+// in the 30-minute smoke. See `.github/workflows/prompt-eval.yml`.
 
 const baseUrl = process.env.AXIOM_API_BASE_URL || "https://api.axiom.org";
 const apiKey = process.env.AXIOM_API_KEY || "";
@@ -46,24 +43,17 @@ const apiKey = process.env.AXIOM_API_KEY || "";
 if (!apiKey) {
   throw new Error("AXIOM_API_KEY is required for the prompt eval.");
 }
-// Not a hard check on ANTHROPIC_API_KEY: the SDK also resolves an
-// `ant auth login` profile, so an unset variable does not mean there is no
-// credential. A machine with a profile and no variable must still run. If
-// there is really no credential, the SDK raises its own authentication error
-// on the first model call.
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.log(
-    "ANTHROPIC_API_KEY is unset; the SDK will look for an `ant auth login` profile."
-  );
-}
 
-const anthropic = new Anthropic();
+// The direct tool calls that compute what the model must reach run in
+// process, against the same server either driver's model talks to.
 const apiClient = new AxiomApiClient({ baseUrl, apiKey });
 const server = createAxiomMcpServer(apiClient);
 const mcp = new Client({ name: "axiom-mcp-prompt-eval", version: "0.1.0" });
 const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
 await Promise.all([server.connect(serverTransport), mcp.connect(clientTransport)]);
+
+const driver = selectDriver();
 
 interface Check {
   readonly name: string;
@@ -79,30 +69,61 @@ interface CaseResult {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly iterations: number;
+  readonly costUsd: number;
 }
 
 const results: CaseResult[] = [];
 
 try {
-  const tools = await bridgeTools();
   for (const build of [variableCase, traceCase, missingInputsCase, subtreeCase]) {
-    results.push(await build(tools));
+    results.push(await build());
   }
 } finally {
+  await driver.close();
   await mcp.close();
   await server.close();
 }
 
 report();
 
-/** Exposes the MCP tool list to the model as Anthropic tool definitions. */
-async function bridgeTools(): Promise<Anthropic.Beta.BetaToolUnion[]> {
-  const listed = await mcp.listTools();
-  return listed.tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description ?? "",
-    input_schema: tool.inputSchema as Anthropic.Beta.BetaTool["input_schema"]
-  }));
+/**
+ * Chooses how to reach a model. The CLI needs no API key, so it is the
+ * default; `AXIOM_EVAL_DRIVER=sdk` asks for the key-and-token route instead.
+ */
+function selectDriver(): PromptDriver {
+  const flag = process.argv
+    .find((argument) => argument.startsWith("--driver="))
+    ?.slice("--driver=".length);
+  const choice = flag || process.env.AXIOM_EVAL_DRIVER || "cli";
+
+  if (choice === "sdk") {
+    // Not a hard check on ANTHROPIC_API_KEY: the SDK also resolves an
+    // `ant auth login` profile, so an unset variable does not mean there is no
+    // credential. A machine with a profile and no variable must still run. If
+    // there is really no credential, the SDK raises its own authentication
+    // error on the first model call.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.log(
+        "ANTHROPIC_API_KEY is unset; the SDK will look for an `ant auth login` profile."
+      );
+    }
+    return createSdkDriver(mcp);
+  }
+  if (choice === "cli") {
+    if (process.env.ANTHROPIC_API_KEY) {
+      console.log(
+        "ANTHROPIC_API_KEY is set but is not passed to the CLI, which would " +
+          "then bill the API instead of its own login. Use --driver=sdk to " +
+          "spend the key on purpose."
+      );
+    }
+    return createCliDriver({
+      baseUrl,
+      apiKey,
+      timeoutMs: process.env.AXIOM_API_TIMEOUT_MS
+    });
+  }
+  throw new Error(`unknown eval driver "${choice}"; expected "cli" or "sdk"`);
 }
 
 /**
@@ -116,9 +137,7 @@ async function bridgeTools(): Promise<Anthropic.Beta.BetaToolUnion[]> {
  * for a fact no serving target reads, so an unreported `ignored_inputs` is an
  * answer that looks computed from the user's facts and was not.
  */
-async function variableCase(
-  tools: Anthropic.Beta.BetaToolUnion[]
-): Promise<CaseResult> {
+async function variableCase(): Promise<CaseResult> {
   const name = "calculate_variable_for_household";
   const document = await fetch(`${baseUrl}/v1/openapi.json`).then((response) =>
     response.json()
@@ -163,8 +182,7 @@ async function variableCase(
   const run = await runPrompt(
     name,
     { variable: example.variable, jurisdiction },
-    `My facts are: ${JSON.stringify(facts)}`,
-    tools
+    `My facts are: ${JSON.stringify(facts)}`
   );
   if (!run.ok) return failed(name, run.reason, run);
 
@@ -193,9 +211,7 @@ async function variableCase(
  * The answer is checkable: this calls the same tool first and requires the
  * model to report the number the API returned.
  */
-async function traceCase(
-  tools: Anthropic.Beta.BetaToolUnion[]
-): Promise<CaseResult> {
+async function traceCase(): Promise<CaseResult> {
   const name = "trace_household_result";
   const pkg = await firstPackageWithSample();
   if (!pkg.ok) return skipped(name, pkg.reason);
@@ -218,8 +234,7 @@ async function traceCase(
   const run = await runPrompt(
     name,
     { program_id: pkg.programId, jurisdiction: pkg.jurisdiction },
-    `My household facts are: ${JSON.stringify(pkg.sampleRequest)}`,
-    tools
+    `My household facts are: ${JSON.stringify(pkg.sampleRequest)}`
   );
   if (!run.ok) return failed(name, run.reason, run);
 
@@ -240,9 +255,7 @@ async function traceCase(
  * household lacks. One leaf fact is removed from the package's own sample
  * request, so the field the model must name is known exactly.
  */
-async function missingInputsCase(
-  tools: Anthropic.Beta.BetaToolUnion[]
-): Promise<CaseResult> {
+async function missingInputsCase(): Promise<CaseResult> {
   const name = "find_missing_household_inputs";
   const pkg = await firstPackageWithSample();
   if (!pkg.ok) return skipped(name, pkg.reason);
@@ -253,8 +266,7 @@ async function missingInputsCase(
   const run = await runPrompt(
     name,
     { program_id: pkg.programId, jurisdiction: pkg.jurisdiction },
-    `My household facts are: ${JSON.stringify(removed.request)}`,
-    tools
+    `My household facts are: ${JSON.stringify(removed.request)}`
   );
   if (!run.ok) return failed(name, run.reason, run);
 
@@ -272,9 +284,7 @@ async function missingInputsCase(
  * Root mode. Same shape as the trace case: discover a subtree, compute its
  * output directly, then require the model to reach it from the prompt.
  */
-async function subtreeCase(
-  tools: Anthropic.Beta.BetaToolUnion[]
-): Promise<CaseResult> {
+async function subtreeCase(): Promise<CaseResult> {
   const name = "run_corpus_subtree";
   const subtrees = await callTool("list_corpus_subtrees", {});
   const root = firstSubtreeRoot(subtrees);
@@ -296,12 +306,7 @@ async function subtreeCase(
     );
   }
 
-  const run = await runPrompt(
-    name,
-    { root },
-    `My facts are: ${JSON.stringify(facts.facts)}`,
-    tools
-  );
+  const run = await runPrompt(name, { root }, `My facts are: ${JSON.stringify(facts.facts)}`);
   if (!run.ok) return failed(name, run.reason, run);
 
   const digits = String(Math.trunc(expected));
@@ -316,26 +321,15 @@ async function subtreeCase(
   ]);
 }
 
-interface RunOutcome {
-  readonly ok: boolean;
-  readonly reason: string;
-  readonly text: string;
-  readonly toolsCalled: Set<string>;
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-  readonly iterations: number;
-}
-
 /**
- * Fetches a prompt from the server and runs it to completion, bridging the
- * model's tool calls to the MCP server. A manual loop rather than the SDK's
- * tool runner, because the runner is beta and this needs to count the calls.
+ * Fetches a prompt from the server and hands it to whichever driver is in
+ * use. The prompt text is rendered here, not by the driver, so both drivers
+ * grade the same words.
  */
 async function runPrompt(
   promptName: string,
   args: Record<string, string>,
-  householdMessage: string,
-  tools: Anthropic.Beta.BetaToolUnion[]
+  householdMessage: string
 ): Promise<RunOutcome> {
   const prompt = await mcp.getPrompt({ name: promptName, arguments: args });
   const promptText = prompt.messages
@@ -343,115 +337,7 @@ async function runPrompt(
       message.content.type === "text" ? message.content.text : ""
     )
     .join("\n");
-
-  const messages: Anthropic.Beta.BetaMessageParam[] = [
-    { role: "user", content: `${promptText}\n\n${householdMessage}` }
-  ];
-  const toolsCalled = new Set<string>();
-  let inputTokens = 0;
-  let outputTokens = 0;
-
-  for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration += 1) {
-    const response = await anthropic.beta.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      output_config: { effort: "medium" },
-      // A policy decline would otherwise end the run with no answer and look
-      // like a prompt failure.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      tools,
-      messages
-    });
-    inputTokens += response.usage.input_tokens;
-    outputTokens += response.usage.output_tokens;
-
-    if (response.stop_reason === "refusal") {
-      return {
-        ok: false,
-        reason: `the model declined: ${response.stop_details?.category ?? "unknown"}`,
-        text: "",
-        toolsCalled,
-        inputTokens,
-        outputTokens,
-        iterations: iteration
-      };
-    }
-    if (response.stop_reason === "max_tokens") {
-      return {
-        ok: false,
-        reason: `hit max_tokens (${MAX_TOKENS}) before answering`,
-        text: textOf(response),
-        toolsCalled,
-        inputTokens,
-        outputTokens,
-        iterations: iteration
-      };
-    }
-
-    messages.push({ role: "assistant", content: response.content });
-
-    if (response.stop_reason === "pause_turn") continue;
-    if (response.stop_reason === "end_turn") {
-      return {
-        ok: true,
-        reason: "",
-        text: textOf(response),
-        toolsCalled,
-        inputTokens,
-        outputTokens,
-        iterations: iteration
-      };
-    }
-
-    const calls = response.content.filter(
-      (block): block is Anthropic.Beta.BetaToolUseBlock =>
-        block.type === "tool_use"
-    );
-    const toolResults: Anthropic.Beta.BetaToolResultBlockParam[] = [];
-    for (const call of calls) {
-      toolsCalled.add(call.name);
-      toolResults.push(await bridgeCall(call));
-    }
-    messages.push({ role: "user", content: toolResults });
-  }
-
-  return {
-    ok: false,
-    reason: `did not answer within ${MAX_ITERATIONS} model calls`,
-    text: "",
-    toolsCalled,
-    inputTokens,
-    outputTokens,
-    iterations: MAX_ITERATIONS
-  };
-}
-
-/** Runs one of the model's tool calls against the MCP server. */
-async function bridgeCall(
-  call: Anthropic.Beta.BetaToolUseBlock
-): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
-  try {
-    const result = await mcp.callTool({
-      name: call.name,
-      arguments: (call.input ?? {}) as Record<string, unknown>
-    });
-    return {
-      type: "tool_result",
-      tool_use_id: call.id,
-      // An API error is a real tool result the model should see and recover
-      // from, so it is forwarded with its error flag rather than thrown.
-      is_error: result.isError === true,
-      content: JSON.stringify(result.structuredContent ?? result.content)
-    };
-  } catch (error) {
-    return {
-      type: "tool_result",
-      tool_use_id: call.id,
-      is_error: true,
-      content: error instanceof Error ? error.message : String(error)
-    };
-  }
+  return driver.run(`${promptText}\n\n${householdMessage}`);
 }
 
 async function callTool(
@@ -507,13 +393,6 @@ async function firstPackageWithSample(): Promise<PackageFixture> {
   return packageFixture;
 }
 
-function textOf(response: Anthropic.Beta.BetaMessage): string {
-  return response.content
-    .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n");
-}
-
 function toolCheck(called: Set<string>, tool: string): Check {
   return {
     name: `calls ${tool}`,
@@ -529,7 +408,8 @@ function graded(prompt: string, run: RunOutcome, checks: Check[]): CaseResult {
     checks,
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
-    iterations: run.iterations
+    iterations: run.iterations,
+    costUsd: run.costUsd
   };
 }
 
@@ -541,7 +421,8 @@ function failed(prompt: string, reason: string, run: RunOutcome): CaseResult {
     reason,
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
-    iterations: run.iterations
+    iterations: run.iterations,
+    costUsd: run.costUsd
   };
 }
 
@@ -553,7 +434,8 @@ function skipped(prompt: string, reason: string): CaseResult {
     reason,
     inputTokens: 0,
     outputTokens: 0,
-    iterations: 0
+    iterations: 0,
+    costUsd: 0
   };
 }
 
@@ -561,10 +443,12 @@ function report(): void {
   const covered = new Set(results.map((result) => result.prompt));
   let inputTokens = 0;
   let outputTokens = 0;
+  let costUsd = 0;
 
   for (const result of results) {
     inputTokens += result.inputTokens;
     outputTokens += result.outputTokens;
+    costUsd += result.costUsd;
     const mark =
       result.status === "pass" ? "PASS" : result.status === "fail" ? "FAIL" : "SKIP";
     console.log(`${mark} ${result.prompt} (${result.iterations} model calls)`);
@@ -574,10 +458,8 @@ function report(): void {
     }
   }
 
-  const cost =
-    inputTokens * PRICE_PER_TOKEN.input + outputTokens * PRICE_PER_TOKEN.output;
   console.log(
-    `\n${inputTokens} input tokens, ${outputTokens} output tokens on ${MODEL}, about $${cost.toFixed(2)}.`
+    `\n${inputTokens} input tokens, ${outputTokens} output tokens on ${EVAL_MODEL} through ${driver.billing}, about $${costUsd.toFixed(2)}.`
   );
 
   const ungraded = PROMPT_CONTRACTS.filter(
