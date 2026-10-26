@@ -55,6 +55,52 @@ describe("prompt contracts", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+it("tells the variable-addressed prompt to read the three response fields", () => {
+    // These three are the whole point of the prompt. `unsupported` means no
+    // value was computed, `ignored_inputs` means facts the user supplied did
+    // not count, and `served_by` says what answered. An agent that skips any
+    // of them reports a confident number it should have qualified.
+    const contract = PROMPT_CONTRACTS.find(
+      (entry) => entry.name === "calculate_variable_for_household"
+    );
+    expect(contract).toBeDefined();
+    if (!contract) return;
+    const text = renderPrompt(contract, {
+      variable: "snap_benefit_amount",
+      jurisdiction: "us-co"
+    });
+    for (const field of ["unsupported", "ignored_inputs", "served_by"]) {
+      expect(text, `does not mention ${field}`).toContain(field);
+    }
+    // The other two modes are selected by these fields, so a
+    // variable-addressed request must not carry them.
+    expect(text).toContain("program_id");
+    expect(text).toContain("root");
+  });
+
+  it("tells every calculating prompt to check ignored_inputs", () => {
+    // The API answers 200 for a fact no serving target reads and reports it
+    // in this field, so a prompt that never names it invites an answer that
+    // looks computed from the user's facts and was not.
+    const calculating = PROMPT_CONTRACTS.filter((contract) =>
+      contract.tools.includes("calculate_household")
+    );
+    expect(calculating.length).toBeGreaterThan(1);
+    const missing = calculating
+      .filter(
+        (contract) =>
+          !renderPrompt(contract, sampleArgs(contract)).includes("ignored_inputs")
+      )
+      .map((contract) => contract.name);
+    // `run_corpus_subtree` is deliberately not in the list, and this pins
+    // that choice rather than a claim about the API: root mode takes a typed
+    // input contract, and whether it reports ignored facts the way
+    // variable-addressed mode does is unverified here. Guidance about a field
+    // that may never appear in that mode would be noise. Add it once a live
+    // root-mode response is seen to carry `ignored_inputs`.
+    expect(missing).toEqual(["run_corpus_subtree"]);
+  });
+
   it("refuses text that names an undeclared tool", () => {
     const tool = toolRef(["get_rule"]);
     expect(tool("get_rule")).toBe("get_rule");

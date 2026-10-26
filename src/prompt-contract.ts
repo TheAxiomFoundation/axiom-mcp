@@ -80,8 +80,24 @@ const packageArgs = {
   jurisdiction: z.string().min(1)
 };
 const rootArgs = { root: z.string().min(1) };
+const variableArgs = {
+  variable: z.string().min(1),
+  jurisdiction: z.string().min(1)
+};
 
 export const PROMPT_CONTRACTS: readonly PromptContract[] = [
+  {
+    name: "calculate_variable_for_household",
+    title: "Calculate one variable for a household",
+    description:
+      "Guide an agent to resolve a variable name and compute it for a household, without needing a program or a root.",
+    args: variableArgs,
+    tools: ["list_variables", "calculate_household"],
+    text: ({ variable, jurisdiction }, tool) =>
+      `Resolve "${variable}" with ${tool("list_variables")} for jurisdiction ${jurisdiction} before calculating. Do not guess the name: an unresolved name comes back under \`unsupported\` with no suggestion. ` +
+      `Then call ${tool("calculate_household")} with the resolved name in \`variables\` and the user's facts in the entity groups the catalog gives for it — no \`program_id\` and no \`root\`, which select the other two modes. ` +
+      "Before answering, read three fields of the response. `unsupported` means the variable was not computed, so say that instead of reporting a number. `ignored_inputs` names facts no serving target read, so any answer stands without them — tell the user which of their facts did not count. `served_by` names what computed each value, and belongs in the answer."
+  },
   {
     name: "explain_rule_for_caseworker",
     title: "Explain rule for caseworker",
@@ -102,7 +118,7 @@ export const PROMPT_CONTRACTS: readonly PromptContract[] = [
     tools: ["get_runtime_package", "calculate_household"],
     text: ({ program_id, jurisdiction }, tool) =>
       `Use ${tool("get_runtime_package")} for ${jurisdiction}/${program_id}, then ${tool("calculate_household")} with the user's household facts. ` +
-      "Explain each requested output from the returned trace, including rule ids and warnings."
+      "Explain each requested output from the returned trace, including rule ids and warnings. Check `ignored_inputs` and say which of the user's facts no serving target read, because the answer stands without them."
   },
   {
     name: "run_corpus_subtree",
@@ -124,6 +140,6 @@ export const PROMPT_CONTRACTS: readonly PromptContract[] = [
     tools: ["get_runtime_package"],
     text: ({ program_id, jurisdiction }, tool) =>
       `Use ${tool("get_runtime_package")} for ${jurisdiction}/${program_id}. ` +
-      "Compare the package entities, inputs, aliases, defaults, and sample request with the user's household. Return only missing or ambiguous facts needed for a reliable calculation."
+      "Compare the package entities, inputs, aliases, defaults, and sample request with the user's household. Return only missing or ambiguous facts needed for a reliable calculation. A fact the package accepts but no serving target reads is reported in `ignored_inputs` on a calculation, so name it as ambiguous rather than supplied."
   }
 ];

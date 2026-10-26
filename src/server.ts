@@ -91,6 +91,23 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     async (uri) => jsonResource(uri.href, await readForResource(() => client.listRuntimePackages()))
   );
 
+  // The catalog that resolves a variable name. It was the one list reachable
+  // only by a tool call, so a client could show a user every program and
+  // every subtree up front but not the variables — the thing a
+  // variable-addressed call needs first. Unfiltered, matching what the
+  // `list_variables` tool returns with no arguments.
+  server.registerResource(
+    "axiom-variables",
+    "axiom://variables",
+    {
+      title: "Axiom variables catalog",
+      description:
+        "Every output a caller can request and every input a caller can supply, with name, kind, entity, dtype, period, jurisdiction, and legal id. Resolve a variable name here before a variable-addressed calculate_household call.",
+      mimeType: "application/json"
+    },
+    async (uri) => jsonResource(uri.href, await readForResource(() => client.listVariables()))
+  );
+
   server.registerResource(
     "axiom-corpus-subtrees",
     "axiom://corpus/subtrees",
@@ -134,6 +151,10 @@ export function createAxiomMcpServer(client: AxiomApiClient): McpServer {
     async () => getVersion(context)
   );
 
+  // No resource for health or readiness: a resource is context a client
+  // reads once and keeps, and a liveness status read at listing time would
+  // be stale by the time it mattered. Asking is the point, so it stays a
+  // tool call.
   server.registerTool(
     "check_health",
     {
