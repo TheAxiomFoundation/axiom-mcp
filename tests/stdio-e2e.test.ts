@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -24,7 +24,12 @@ describe("stdio end-to-end", () => {
   const receivedAuthHeaders: Array<string | undefined> = [];
 
   beforeAll(async () => {
-    if (!existsSync(distIndex)) {
+    // Build when dist is missing OR older than the sources it came from.
+    // Testing only for existence let this suite validate a stale binary and
+    // report success: with `check_readiness` renamed in src and dist left
+    // alone, it passed while asserting against the previous build. `npm run
+    // check` builds first so CI never saw it, but `npm test` on its own did.
+    if (isDistStale()) {
       const build = spawnSync("npm", ["run", "build"], {
         cwd: repoRoot,
         stdio: "pipe",
@@ -32,6 +37,11 @@ describe("stdio end-to-end", () => {
       });
       if (build.status !== 0) {
         throw new Error(`npm run build failed:\n${String(build.stderr)}`);
+      }
+      if (isDistStale()) {
+        throw new Error(
+          "npm run build reported success but dist is still older than src"
+        );
       }
     }
 
@@ -110,6 +120,24 @@ describe("stdio end-to-end", () => {
     }
   }, 30_000);
 });
+
+/**
+ * Is the built binary older than any source it is built from?
+ *
+ * `tsc` writes dist from src and package.json (the server reads its version
+ * out of it at runtime), so either being newer means dist no longer
+ * represents them.
+ */
+function isDistStale(): boolean {
+  if (!existsSync(distIndex)) return true;
+  const builtAtMs = statSync(distIndex).mtimeMs;
+  const sourceDir = fileURLToPath(new URL("../src", import.meta.url));
+  const sources = readdirSync(sourceDir, { recursive: true, encoding: "utf8" })
+    .filter((entry) => entry.endsWith(".ts"))
+    .map((entry) => fileURLToPath(new URL(`../src/${entry}`, import.meta.url)));
+  sources.push(fileURLToPath(new URL("../package.json", import.meta.url)));
+  return sources.some((source) => statSync(source).mtimeMs > builtAtMs);
+}
 
 function routeMockApi(request: IncomingMessage): { status: number; body: unknown } {
   if (request.method === "GET" && request.url === "/v1/capabilities") {
