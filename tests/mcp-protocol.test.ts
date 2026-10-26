@@ -159,6 +159,7 @@ describe("Axiom MCP server protocol", () => {
           "axiom://capabilities",
           "axiom://programs",
           "axiom://runtime/packages",
+          "axiom://variables",
           "axiom://corpus/subtrees",
           "axiom://parity/cases"
         ])
@@ -209,6 +210,7 @@ describe("Axiom MCP server protocol", () => {
       const prompts = await client.listPrompts();
       expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(
         expect.arrayContaining([
+          "calculate_variable_for_household",
           "explain_rule_for_caseworker",
           "trace_household_result",
           "run_corpus_subtree",

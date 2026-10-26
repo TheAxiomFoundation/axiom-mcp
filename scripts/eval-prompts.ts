@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { AxiomApiClient } from "../src/axiom-client.js";
 import { PROMPT_CONTRACTS } from "../src/prompt-contract.js";
 import { createAxiomMcpServer } from "../src/server.js";
+import { nativeExampleFromOpenApi } from "./native-request.js";
 import {
   asString,
   collectObjects,
@@ -84,7 +85,7 @@ const results: CaseResult[] = [];
 
 try {
   const tools = await bridgeTools();
-  for (const build of [traceCase, missingInputsCase, subtreeCase]) {
+  for (const build of [variableCase, traceCase, missingInputsCase, subtreeCase]) {
     results.push(await build(tools));
   }
 } finally {
@@ -102,6 +103,89 @@ async function bridgeTools(): Promise<Anthropic.Beta.BetaToolUnion[]> {
     description: tool.description ?? "",
     input_schema: tool.inputSchema as Anthropic.Beta.BetaTool["input_schema"]
   }));
+}
+
+/**
+ * Variable-addressed mode. The fixture is the API's own published example, so
+ * the case cannot drift from the documentation a caller would copy;
+ * `native-request.ts` already reads it and refuses an unusable one.
+ *
+ * Two things are graded. The model must resolve the variable name through the
+ * catalog rather than guess it, and reach the value the API returns. It must
+ * also report the facts the response says were ignored — the API answers 200
+ * for a fact no serving target reads, so an unreported `ignored_inputs` is an
+ * answer that looks computed from the user's facts and was not.
+ */
+async function variableCase(
+  tools: Anthropic.Beta.BetaToolUnion[]
+): Promise<CaseResult> {
+  const name = "calculate_variable_for_household";
+  const document = await fetch(`${baseUrl}/v1/openapi.json`).then((response) =>
+    response.json()
+  );
+  const example = nativeExampleFromOpenApi(document);
+  if (!example.ok) return skipped(name, example.reason);
+
+  // The jurisdiction comes from the catalog row, not from the example's own
+  // `state`, so the argument is in whatever form the catalog uses. A variable
+  // the catalog does not list is itself a finding, not a fixture problem to
+  // paper over.
+  const catalog = await callTool("list_variables", {
+    q: example.variable,
+    limit: 50
+  });
+  const row = collectObjects(catalog, "variables").find(
+    (entry) => asString(entry.name) === example.variable
+  );
+  const jurisdiction = row ? asString(row.jurisdiction) : undefined;
+  if (!jurisdiction) {
+    return skipped(
+      name,
+      `the published example asks for "${example.variable}", which the variables catalog does not list`
+    );
+  }
+
+  const direct = await callTool("calculate_household", example.request);
+  const expected = firstNumericValue(direct);
+  if (expected === undefined || expected === 0) {
+    return skipped(
+      name,
+      `${example.variable} produced no nonzero value to check against`
+    );
+  }
+  const ignored = collectObjects(direct, "ignored_inputs")
+    .map((entry) => asString(entry.field))
+    .filter((field): field is string => field !== undefined);
+
+  // The prompt tells the agent to choose the variable itself, so the facts go
+  // over without it.
+  const { variables: _requested, ...facts } = example.request;
+  const run = await runPrompt(
+    name,
+    { variable: example.variable, jurisdiction },
+    `My facts are: ${JSON.stringify(facts)}`,
+    tools
+  );
+  if (!run.ok) return failed(name, run.reason, run);
+
+  const digits = String(Math.trunc(expected));
+  const checks: Check[] = [
+    toolCheck(run.toolsCalled, "list_variables"),
+    toolCheck(run.toolsCalled, "calculate_household"),
+    {
+      name: "reports the computed value",
+      ok: run.text.includes(digits),
+      detail: `expected the answer to contain ${digits}`
+    }
+  ];
+  if (ignored.length > 0) {
+    checks.push({
+      name: "reports the ignored facts",
+      ok: ignored.some((field) => run.text.includes(field)),
+      detail: `the API ignored ${ignored.join(", ")}; expected the answer to name at least one`
+    });
+  }
+  return graded(name, run, checks);
 }
 
 /**
