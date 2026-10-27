@@ -24,12 +24,16 @@ export interface CliRun {
   readonly outputTokens: number;
   readonly turns: number;
   readonly costUsd: number;
+  /** The CLI that ran, so a report says which harness produced it. */
+  readonly cliVersion: string;
 }
 
 export function parseCliStream(lines: readonly string[]): CliRun {
   const toolsCalled = new Set<string>();
   let result: Record<string, unknown> | undefined;
   let unconnected: string[] = [];
+  let foreignTools: string[] = [];
+  let cliVersion = "";
   let sawInit = false;
 
   for (const event of jsonEvents(lines)) {
@@ -37,6 +41,8 @@ export function parseCliStream(lines: readonly string[]): CliRun {
     if (type === "system" && asString(event.subtype) === "init") {
       sawInit = true;
       unconnected = serversNotConnected(event);
+      foreignTools = toolsBeyondTheServer(event);
+      cliVersion = asString(event.claude_code_version) ?? "";
     } else if (type === "assistant") {
       for (const name of toolNamesIn(event)) toolsCalled.add(name);
     } else if (type === "result") {
@@ -57,6 +63,7 @@ export function parseCliStream(lines: readonly string[]): CliRun {
     // The CLI reports what the work costs on the API, whichever credential
     // actually paid for it.
     costUsd: asNumber(result?.total_cost_usd),
+    cliVersion,
     toolsCalled
   };
 
@@ -69,6 +76,17 @@ export function parseCliStream(lines: readonly string[]): CliRun {
   if (unconnected.length > 0) {
     return fault(
       `the MCP server(s) ${unconnected.join(", ")} did not connect, so the model had no Axiom tools`,
+      totals
+    );
+  }
+  // The eval asks the CLI for the Axiom tools and nothing else, so the
+  // prompt under test has to do all the work. A built-in that slips
+  // through gives the model another way to reach an answer, and the run
+  // stops being a test of the prompt. One CI run called `Bash`.
+  if (foreignTools.length > 0) {
+    return fault(
+      `the CLI offered ${foreignTools.join(", ")} besides the ` +
+        `${MCP_SERVER_NAME} tools, so the run was not isolated`,
       totals
     );
   }
@@ -156,6 +174,16 @@ function serversNotConnected(event: Record<string, unknown>): string[] {
     .map((entry) => asRecord(entry))
     .filter((entry) => asString(entry?.status) !== "connected")
     .map((entry) => asString(entry?.name) ?? "unnamed");
+}
+
+/** Tools the CLI offered that did not come from the Axiom server. */
+function toolsBeyondTheServer(event: Record<string, unknown>): string[] {
+  const tools = event.tools;
+  if (!Array.isArray(tools)) return [];
+  return tools
+    .map((tool) => asString(tool))
+    .filter((name): name is string => name !== undefined)
+    .filter((name) => !name.startsWith(TOOL_PREFIX));
 }
 
 function deniedTools(result: Record<string, unknown> | undefined): string[] {

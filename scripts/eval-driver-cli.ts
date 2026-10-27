@@ -53,6 +53,7 @@ export function createCliDriver(options: CliDriverOptions): PromptDriver {
   const model = options.model ?? EVAL_MODEL;
   const claudeBin = process.env.CLAUDE_BIN || "claude";
   let workDir: string | undefined;
+  let reportedVersion = "";
   let configPath: string | undefined;
 
   return {
@@ -92,6 +93,13 @@ export function createCliDriver(options: CliDriverOptions): PromptDriver {
         "--no-session-persistence"
       ];
       const parsed = parseCliStream(await runClaude(claudeBin, args, workDir));
+      // Said once. The flags that isolate a run are read by whichever CLI
+      // the machine has, so a report that does not name it cannot be
+      // compared with the next one.
+      if (parsed.cliVersion && parsed.cliVersion !== reportedVersion) {
+        reportedVersion = parsed.cliVersion;
+        console.log(`claude CLI ${reportedVersion}`);
+      }
       return {
         ok: parsed.ok,
         reason: parsed.reason,

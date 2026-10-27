@@ -151,6 +151,38 @@ describe("parseCliStream", () => {
     expect(run.ok).toBe(false);
     expect(run.reason).toContain("no answer text");
   });
+  it("reads the CLI version, so two reports can be compared", () => {
+    const run = parseCliStream(stream([init(), result({})]));
+
+    expect(run.cliVersion).toBe("2.1.311");
+  });
+
+  // A CI run called `Bash`, which the eval never offers. Whatever reached it,
+  // the model then had a second way to an answer and the run stopped being a
+  // test of the prompt.
+  it("faults when the CLI offers a tool the eval did not ask for", () => {
+    const run = parseCliStream(
+      stream([
+        init(undefined, ["mcp__axiom__calculate_household", "Bash", "Read"]),
+        assistantToolUse("Bash"),
+        result({ result: "I ran it in the shell." })
+      ])
+    );
+
+    expect(run.ok).toBe(false);
+    expect(run.reason).toContain("Bash");
+    expect(run.reason).toContain("Read");
+    expect(run.reason).toContain("not isolated");
+    expect(run.text).toBe("");
+  });
+
+  it("accepts a run offered only the server's own tools", () => {
+    const run = parseCliStream(
+      stream([init(), result({ result: "SNAP comes to 291 dollars." })])
+    );
+
+    expect(run.ok).toBe(true);
+  });
 });
 
 function stream(events: unknown[]): string[] {
@@ -160,13 +192,18 @@ function stream(events: unknown[]): string[] {
 function init(
   servers: Array<{ name: string; status: string }> = [
     { name: MCP_SERVER_NAME, status: "connected" }
+  ],
+  tools: string[] = [
+    "mcp__axiom__calculate_household",
+    "mcp__axiom__list_variables"
   ]
 ): unknown {
   return {
     type: "system",
     subtype: "init",
+    claude_code_version: "2.1.311",
     mcp_servers: servers.map((server) => ({ ...server, source: "dynamic" })),
-    tools: ["mcp__axiom__calculate_household", "mcp__axiom__list_variables"]
+    tools
   };
 }
 
