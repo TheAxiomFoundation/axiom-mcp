@@ -96,7 +96,12 @@ interface CaseResult {
  */
 const MAX_FIXTURE_CHARACTERS = 50_000;
 
-let packageFixture: PackageFixture | undefined;
+/** How many packages the search opens before it gives up. */
+const MAX_PACKAGES_EXAMINED = 12;
+
+/** One cache per requirement: the cases do not want the same package. */
+let anyPackage: PackageFixture | undefined;
+let computablePackage: PackageFixture | undefined;
 
 type CaseBuilder = (name: string) => Promise<CaseResult>;
 
@@ -243,16 +248,11 @@ async function variableCase(name: string): Promise<CaseResult> {
  * model to report the number the API returned.
  */
 async function traceCase(name: string): Promise<CaseResult> {
-  const pkg = await firstPackageWithSample();
+  const pkg = await firstComputablePackage();
   if (!pkg.ok) return skipped(name, pkg.reason);
-
-  const direct = await callTool("calculate_household", pkg.sampleRequest);
-  const expected = checkableValue(firstNumericValue(direct));
-  if (!expected.ok) {
-    return skipped(
-      name,
-      `${pkg.jurisdiction}/${pkg.programId} ${expected.reason}`
-    );
+  const expected = pkg.computed;
+  if (expected === undefined) {
+    return skipped(name, `${pkg.jurisdiction}/${pkg.programId} computed nothing`);
   }
 
   const run = await runPrompt(
@@ -265,7 +265,7 @@ async function traceCase(name: string): Promise<CaseResult> {
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_runtime_package"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    valueCheck(run.text, expected.value)
+    valueCheck(run.text, expected)
   ]);
 }
 
@@ -368,6 +368,8 @@ type PackageFixture =
       programId: string;
       jurisdiction: string;
       sampleRequest: Record<string, unknown>;
+      /** What the sample computes, when the search was asked to check. */
+      computed?: number;
     }
   | { ok: false; reason: string };
 
@@ -376,20 +378,52 @@ type PackageFixture =
  * rather than hard-coded, so the eval follows what the API actually serves.
  */
 async function firstPackageWithSample(): Promise<PackageFixture> {
-  if (packageFixture) return packageFixture;
+  anyPackage = anyPackage ?? (await findPackage(false));
+  return anyPackage;
+}
+
+/**
+ * A package whose sample request computes something an answer can be checked
+ * against. `trace_household_result` needs one: it asks the model to report
+ * the number the API returned, and a package that computes 0 — or 9 — gives
+ * a check any answer passes. `find_missing_household_inputs` does not care
+ * what the sample computes, so it takes the first package that fits, and the
+ * two keep separate caches.
+ */
+async function firstComputablePackage(): Promise<PackageFixture> {
+  computablePackage = computablePackage ?? (await findPackage(true));
+  return computablePackage;
+}
+
+/**
+ * Walks the published packages for one the eval can use.
+ *
+ * The search is bounded. Each candidate costs a `get_runtime_package`, and a
+ * checked one costs a `calculate_household` as well; these are direct API
+ * calls rather than model calls, but a catalogue of hundreds would still
+ * make a run crawl.
+ */
+async function findPackage(requireValue: boolean): Promise<PackageFixture> {
   const listed = await callTool("list_runtime_packages", {});
   const rows = collectObjects(listed, "packages");
   const tooLarge: string[] = [];
+  const unusableValue: string[] = [];
+  let examined = 0;
+
   for (const row of rows) {
     const programId = asString(row.program_id ?? row.id);
     const jurisdiction = asString(row.jurisdiction);
     if (!programId || !jurisdiction) continue;
+    if (examined >= MAX_PACKAGES_EXAMINED) break;
+    examined += 1;
+
     const detail = await callTool("get_runtime_package", {
       jurisdiction,
       program_id: programId
     });
     const sample = findObject(detail, "sample_request");
     if (!sample) continue;
+
     // Measured here, before the model is called. us-ny/snap answers with
     // about 59 KB, and the CLI files a result that size away and replies
     // with a path the model has no tool to open. Paying for a run whose
@@ -399,18 +433,46 @@ async function firstPackageWithSample(): Promise<PackageFixture> {
       tooLarge.push(`${jurisdiction}/${programId} (${size} characters)`);
       continue;
     }
-    packageFixture = { ok: true, programId, jurisdiction, sampleRequest: sample };
-    return packageFixture;
+
+    if (!requireValue) {
+      return { ok: true, programId, jurisdiction, sampleRequest: sample };
+    }
+
+    const computed = checkableValue(
+      firstNumericValue(await callTool("calculate_household", sample))
+    );
+    if (!computed.ok) {
+      unusableValue.push(`${jurisdiction}/${programId} ${computed.reason}`);
+      continue;
+    }
+    return {
+      ok: true,
+      programId,
+      jurisdiction,
+      sampleRequest: sample,
+      computed: computed.value
+    };
   }
-  packageFixture = {
-    ok: false,
-    reason:
-      tooLarge.length > 0
-        ? `every package with a sample request is too large for the model to ` +
-          `read: ${tooLarge.join(", ")}`
-        : "no runtime package published a sample_request"
-  };
-  return packageFixture;
+
+  return { ok: false, reason: searchFailure(tooLarge, unusableValue, examined) };
+}
+
+function searchFailure(
+  tooLarge: string[],
+  unusableValue: string[],
+  examined: number
+): string {
+  const reasons: string[] = [];
+  if (tooLarge.length > 0) {
+    reasons.push(`too large for the model to read: ${tooLarge.join(", ")}`);
+  }
+  if (unusableValue.length > 0) {
+    reasons.push(`nothing checkable computed: ${unusableValue.join("; ")}`);
+  }
+  if (reasons.length === 0) {
+    return `no runtime package published a sample_request in the first ${examined} examined`;
+  }
+  return `no usable package in the first ${examined} examined — ${reasons.join("; ")}`;
 }
 
 /** Requires the answer to report the number the API computed. */
