@@ -86,6 +86,16 @@ interface CaseResult {
  * zone when `firstPackageWithSample` reads it, and the second case dies
  * with a ReferenceError before it grades anything.
  */
+/**
+ * How large a package may be and still reach the model.
+ *
+ * Past its own ceiling the CLI writes a tool result to a file and answers
+ * with the path. The run holds the Axiom tools and nothing else, so it
+ * cannot open one. The number comes from the CLI's own refusal, which
+ * counted 60,462 characters; this sits under it with room to spare.
+ */
+const MAX_FIXTURE_CHARACTERS = 50_000;
+
 let packageFixture: PackageFixture | undefined;
 
 type CaseBuilder = (name: string) => Promise<CaseResult>;
@@ -369,6 +379,7 @@ async function firstPackageWithSample(): Promise<PackageFixture> {
   if (packageFixture) return packageFixture;
   const listed = await callTool("list_runtime_packages", {});
   const rows = collectObjects(listed, "packages");
+  const tooLarge: string[] = [];
   for (const row of rows) {
     const programId = asString(row.program_id ?? row.id);
     const jurisdiction = asString(row.jurisdiction);
@@ -378,14 +389,26 @@ async function firstPackageWithSample(): Promise<PackageFixture> {
       program_id: programId
     });
     const sample = findObject(detail, "sample_request");
-    if (sample) {
-      packageFixture = { ok: true, programId, jurisdiction, sampleRequest: sample };
-      return packageFixture;
+    if (!sample) continue;
+    // Measured here, before the model is called. us-ny/snap answers with
+    // about 59 KB, and the CLI files a result that size away and replies
+    // with a path the model has no tool to open. Paying for a run whose
+    // fixture cannot reach the model buys nothing, so look for one that fits.
+    const size = JSON.stringify(detail).length;
+    if (size > MAX_FIXTURE_CHARACTERS) {
+      tooLarge.push(`${jurisdiction}/${programId} (${size} characters)`);
+      continue;
     }
+    packageFixture = { ok: true, programId, jurisdiction, sampleRequest: sample };
+    return packageFixture;
   }
   packageFixture = {
     ok: false,
-    reason: "no runtime package published a sample_request"
+    reason:
+      tooLarge.length > 0
+        ? `every package with a sample request is too large for the model to ` +
+          `read: ${tooLarge.join(", ")}`
+        : "no runtime package published a sample_request"
   };
   return packageFixture;
 }

@@ -213,6 +213,41 @@ describe("parseCliStream", () => {
     expect(run.inputTokens).toBe(32085);
   });
 
+  // The first detector read one field and missed this shape in CI, where a
+  // tool result carries its text as a list of blocks rather than a string.
+  it("faults on a filed-away result whose text is in blocks", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        {
+          type: "user",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_1",
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: result (60,462 characters across 1 line) " +
+                      "exceeds maximum allowed tokens. Output has been " +
+                      "saved to /tmp/tool-results/x.txt."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        result({ result: "I could not read the package." })
+      ])
+    );
+
+    expect(run.ok).toBe(false);
+    expect(run.reason).toContain("60,462 characters");
+  });
+
   it("leaves an ordinary tool result alone", () => {
     const run = parseCliStream(
       stream([

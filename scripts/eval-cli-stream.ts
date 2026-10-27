@@ -15,6 +15,9 @@ export const MCP_SERVER_NAME = "axiom";
 /** The CLI prefixes every MCP tool name with its server. */
 const TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
 
+/** What the CLI says when a result is too large to hand to the model. */
+const SPILL_MARKER = "exceeds maximum allowed tokens";
+
 export interface CliRun {
   readonly ok: boolean;
   readonly reason: string;
@@ -189,27 +192,25 @@ function serversNotConnected(event: Record<string, unknown>): string[] {
 }
 
 /**
- * The CLI's own words when it files a result away instead of answering
- * it: `Error: result (60,462 characters across 1 line) exceeds maximum
- * allowed tokens. Output has been saved to ...`.
+ * The CLI's own words when it files a result away instead of answering it:
+ * `Error: result (60,462 characters across 1 line) exceeds maximum allowed
+ * tokens. Output has been saved to ...`.
+ *
+ * The whole event is searched rather than one field of it. A tool result
+ * carries its text as a plain string from one server and as a list of
+ * blocks from another, and a detector written for the shape in front of me
+ * missed the shape in CI — twice over, at about $0.50 a run.
  */
 function spilledToolResult(
   event: Record<string, unknown>
 ): string | undefined {
-  const content = asRecord(event.message)?.content;
-  if (!Array.isArray(content)) return undefined;
-  for (const block of content) {
-    const text = asString(asRecord(block)?.content);
-    if (!text) continue;
-    if (!text.includes("exceeds maximum allowed tokens")) continue;
-    const size = /result \(([\d,]+) characters/.exec(text)?.[1];
-    return (
-      `a tool result${size ? ` of ${size} characters` : ""} was written ` +
-      "to a file instead of answered to the model, which has no tool " +
-      "that can open it"
-    );
-  }
-  return undefined;
+  const text = JSON.stringify(event);
+  if (!text.includes(SPILL_MARKER)) return undefined;
+  const size = /result \((\d[\d,]*) characters/.exec(text)?.[1];
+  return (
+    `a tool result${size ? ` of ${size} characters` : ""} was written to a ` +
+    "file instead of answered to the model, which has no tool that can open it"
+  );
 }
 
 /** Tools the CLI offered that did not come from the Axiom server. */
