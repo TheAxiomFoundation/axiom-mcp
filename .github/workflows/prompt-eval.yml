@@ -24,6 +24,11 @@ jobs:
       # Two ways to reach a model, and the eval grades the same prompts the
       # same way through either. The CLI login is preferred because it needs
       # no API key; an API key is used only when there is no CLI token.
+      #
+      # A missing credential fails the run. It used to print a line and exit
+      # 0, which made every scheduled run green while grading nothing — the
+      # same false signal the eval itself was taught to refuse, and the one
+      # an expired CLI token would hide for as long as nobody read the logs.
       - name: Check prompt eval configuration
         id: config
         env:
@@ -33,20 +38,17 @@ jobs:
           MODEL_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$AXIOM_KEY" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Prompt eval skipped: needs the AXIOM_API_BASE_URL variable and the AXIOM_API_KEY secret."
-            exit 0
+            echo "::error::Prompt eval cannot grade anything: set the AXIOM_API_BASE_URL variable and the AXIOM_API_KEY secret."
+            exit 1
           fi
           if [ -n "$CLI_TOKEN" ]; then
             echo "driver=cli" >> "$GITHUB_OUTPUT"
           elif [ -n "$MODEL_KEY" ]; then
             echo "driver=sdk" >> "$GITHUB_OUTPUT"
           else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Prompt eval skipped: needs a model credential — the CLAUDE_CODE_OAUTH_TOKEN secret (from \`claude setup-token\`), or the ANTHROPIC_API_KEY secret."
-            exit 0
+            echo "::error::Prompt eval cannot reach a model: set the CLAUDE_CODE_OAUTH_TOKEN secret (from \`claude setup-token\`), or the ANTHROPIC_API_KEY secret."
+            exit 1
           fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       # Pinned. The flags that isolate a run — `--tools ""`, `--strict-mcp-config`,
       # `--setting-sources ""` — are read by the CLI, so an unpinned install lets
@@ -57,7 +59,6 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code@2.1.311
 
       - name: Run the prompt eval
-        if: steps.config.outputs.configured == 'true'
         env:
           AXIOM_API_BASE_URL: ${{ vars.AXIOM_API_BASE_URL }}
           AXIOM_API_KEY: ${{ secrets.AXIOM_API_KEY }}
