@@ -48,9 +48,13 @@ jobs:
           fi
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
+      # Pinned. The flags that isolate a run — `--tools ""`, `--strict-mcp-config`,
+      # `--setting-sources ""` — are read by the CLI, so an unpinned install lets
+      # the harness change under the eval between one run and the next. Bump it
+      # deliberately, after checking the tool list a run is offered.
       - name: Install the Claude Code CLI
         if: steps.config.outputs.driver == 'cli'
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.311
 
       - name: Run the prompt eval
         if: steps.config.outputs.configured == 'true'

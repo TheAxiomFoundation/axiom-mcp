@@ -151,7 +151,133 @@ describe("parseCliStream", () => {
     expect(run.ok).toBe(false);
     expect(run.reason).toContain("no answer text");
   });
+  it("reads the CLI version, so two reports can be compared", () => {
+    const run = parseCliStream(stream([init(), result({})]));
+
+    expect(run.cliVersion).toBe("2.1.311");
+  });
+
+  // A CI run called `Bash`, which the eval never offers. Whatever reached it,
+  // the model then had a second way to an answer and the run stopped being a
+  // test of the prompt.
+  it("faults when the CLI offers a tool the eval did not ask for", () => {
+    const run = parseCliStream(
+      stream([
+        init(undefined, ["mcp__axiom__calculate_household", "Bash", "Read"]),
+        assistantToolUse("Bash"),
+        result({ result: "I ran it in the shell." })
+      ])
+    );
+
+    expect(run.ok).toBe(false);
+    expect(run.reason).toContain("Bash");
+    expect(run.reason).toContain("Read");
+    expect(run.reason).toContain("not isolated");
+    expect(run.text).toBe("");
+  });
+
+  // The CLI's own reply when a result is too big to hand over. It advises
+  // grepping the file or slicing it with Bash — which this run cannot do, and
+  // which is where the stray `Bash` in one report came from.
+  it("faults when a tool result was written to a file", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        toolResult(
+          "Error: result (60,462 characters across 1 line) exceeds maximum " +
+            "allowed tokens. Output has been saved to /tmp/tool-results/x.txt.\n" +
+            "- For targeted searches (find a string): use grep on the file."
+        ),
+        result({ result: "I could not read the package." })
+      ])
+    );
+
+    expect(run.ok).toBe(false);
+    expect(run.reason).toContain("60,462 characters");
+    expect(run.reason).toContain("written to a file");
+    expect(run.text).toBe("");
+  });
+
+  it("still reports what a spilled run called and spent", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        toolResult("Error: result (99 characters) exceeds maximum allowed tokens."),
+        result({})
+      ])
+    );
+
+    expect([...run.toolsCalled]).toEqual(["get_runtime_package"]);
+    expect(run.inputTokens).toBe(32085);
+  });
+
+  // The first detector read one field and missed this shape in CI, where a
+  // tool result carries its text as a list of blocks rather than a string.
+  it("faults on a filed-away result whose text is in blocks", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        {
+          type: "user",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_1",
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: result (60,462 characters across 1 line) " +
+                      "exceeds maximum allowed tokens. Output has been " +
+                      "saved to /tmp/tool-results/x.txt."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        result({ result: "I could not read the package." })
+      ])
+    );
+
+    expect(run.ok).toBe(false);
+    expect(run.reason).toContain("60,462 characters");
+  });
+
+  it("leaves an ordinary tool result alone", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        toolResult('{"program_id":"us-ny/snap"}'),
+        result({ result: "The package is us-ny/snap." })
+      ])
+    );
+
+    expect(run.ok).toBe(true);
+  });
+
+  it("accepts a run offered only the server's own tools", () => {
+    const run = parseCliStream(
+      stream([init(), result({ result: "SNAP comes to 291 dollars." })])
+    );
+
+    expect(run.ok).toBe(true);
+  });
 });
+
+function toolResult(content: string): unknown {
+  return {
+    type: "user",
+    message: {
+      content: [{ type: "tool_result", tool_use_id: "toolu_1", content }]
+    }
+  };
+}
 
 function stream(events: unknown[]): string[] {
   return events.map((event) => JSON.stringify(event));
@@ -160,13 +286,18 @@ function stream(events: unknown[]): string[] {
 function init(
   servers: Array<{ name: string; status: string }> = [
     { name: MCP_SERVER_NAME, status: "connected" }
+  ],
+  tools: string[] = [
+    "mcp__axiom__calculate_household",
+    "mcp__axiom__list_variables"
   ]
 ): unknown {
   return {
     type: "system",
     subtype: "init",
+    claude_code_version: "2.1.311",
     mcp_servers: servers.map((server) => ({ ...server, source: "dynamic" })),
-    tools: ["mcp__axiom__calculate_household", "mcp__axiom__list_variables"]
+    tools
   };
 }
 

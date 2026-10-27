@@ -11,9 +11,13 @@ import {
   asString,
   collectObjects,
   findObject,
+  answerExcerpt,
+  checkableValue,
+  namesField,
   firstNumericValue,
   firstSubtreeRoot,
   removeOneLeaf,
+  reportsNumber,
   sampleFactsFrom
 } from "./eval-fixtures.js";
 
@@ -66,17 +70,58 @@ interface CaseResult {
   readonly status: "pass" | "fail" | "skipped";
   readonly checks: Check[];
   readonly reason?: string;
+  /** What the model answered, kept so a failure can be read. */
+  readonly answer?: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly iterations: number;
   readonly costUsd: number;
 }
 
+/**
+ * The runtime-package fixture, cached across the cases that share it.
+ *
+ * It is declared above the run block on purpose. The cases run from there,
+ * so the same `let` further down the file is still in its temporal dead
+ * zone when `firstPackageWithSample` reads it, and the second case dies
+ * with a ReferenceError before it grades anything.
+ */
+/**
+ * How large a package may be and still reach the model.
+ *
+ * Past its own ceiling the CLI writes a tool result to a file and answers
+ * with the path. The run holds the Axiom tools and nothing else, so it
+ * cannot open one. The number comes from the CLI's own refusal, which
+ * counted 60,462 characters; this sits under it with room to spare.
+ */
+const MAX_FIXTURE_CHARACTERS = 50_000;
+
+/** How many packages the search opens before it gives up. */
+const MAX_PACKAGES_EXAMINED = 12;
+
+/** One cache per requirement: the cases do not want the same package. */
+let anyPackage: PackageFixture | undefined;
+let computablePackage: PackageFixture | undefined;
+
+type CaseBuilder = (name: string) => Promise<CaseResult>;
+
+/**
+ * Each prompt under test, with the case that grades it. The names are the
+ * server's own prompt names, so `report` can name a contract that no case
+ * covers.
+ */
+const CASES: ReadonlyArray<readonly [string, CaseBuilder]> = [
+  ["calculate_variable_for_household", variableCase],
+  ["trace_household_result", traceCase],
+  ["find_missing_household_inputs", missingInputsCase],
+  ["run_corpus_subtree", subtreeCase]
+];
+
 const results: CaseResult[] = [];
 
 try {
-  for (const build of [variableCase, traceCase, missingInputsCase, subtreeCase]) {
-    results.push(await build());
+  for (const [name, build] of CASES) {
+    results.push(await runCase(name, build));
   }
 } finally {
   await driver.close();
@@ -137,8 +182,7 @@ function selectDriver(): PromptDriver {
  * for a fact no serving target reads, so an unreported `ignored_inputs` is an
  * answer that looks computed from the user's facts and was not.
  */
-async function variableCase(): Promise<CaseResult> {
-  const name = "calculate_variable_for_household";
+async function variableCase(name: string): Promise<CaseResult> {
   const document = await fetch(`${baseUrl}/v1/openapi.json`).then((response) =>
     response.json()
   );
@@ -165,12 +209,9 @@ async function variableCase(): Promise<CaseResult> {
   }
 
   const direct = await callTool("calculate_household", example.request);
-  const expected = firstNumericValue(direct);
-  if (expected === undefined || expected === 0) {
-    return skipped(
-      name,
-      `${example.variable} produced no nonzero value to check against`
-    );
+  const expected = checkableValue(firstNumericValue(direct));
+  if (!expected.ok) {
+    return skipped(name, `${example.variable} ${expected.reason}`);
   }
   const ignored = collectObjects(direct, "ignored_inputs")
     .map((entry) => asString(entry.field))
@@ -184,22 +225,17 @@ async function variableCase(): Promise<CaseResult> {
     { variable: example.variable, jurisdiction },
     `My facts are: ${JSON.stringify(facts)}`
   );
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
-  const digits = String(Math.trunc(expected));
   const checks: Check[] = [
     toolCheck(run.toolsCalled, "list_variables"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    {
-      name: "reports the computed value",
-      ok: run.text.includes(digits),
-      detail: `expected the answer to contain ${digits}`
-    }
+    valueCheck(run.text, expected.value)
   ];
   if (ignored.length > 0) {
     checks.push({
       name: "reports the ignored facts",
-      ok: ignored.some((field) => run.text.includes(field)),
+      ok: ignored.some((field) => namesField(run.text, field)),
       detail: `the API ignored ${ignored.join(", ")}; expected the answer to name at least one`
     });
   }
@@ -211,24 +247,12 @@ async function variableCase(): Promise<CaseResult> {
  * The answer is checkable: this calls the same tool first and requires the
  * model to report the number the API returned.
  */
-async function traceCase(): Promise<CaseResult> {
-  const name = "trace_household_result";
-  const pkg = await firstPackageWithSample();
+async function traceCase(name: string): Promise<CaseResult> {
+  const pkg = await firstComputablePackage();
   if (!pkg.ok) return skipped(name, pkg.reason);
-
-  const direct = await callTool("calculate_household", pkg.sampleRequest);
-  const expected = firstNumericValue(direct);
+  const expected = pkg.computed;
   if (expected === undefined) {
-    return skipped(
-      name,
-      `calculate_household on ${pkg.jurisdiction}/${pkg.programId} returned no numeric value to check against`
-    );
-  }
-  if (expected === 0) {
-    return skipped(
-      name,
-      `${pkg.jurisdiction}/${pkg.programId} computes 0, which any answer contains by accident`
-    );
+    return skipped(name, `${pkg.jurisdiction}/${pkg.programId} computed nothing`);
   }
 
   const run = await runPrompt(
@@ -236,17 +260,12 @@ async function traceCase(): Promise<CaseResult> {
     { program_id: pkg.programId, jurisdiction: pkg.jurisdiction },
     `My household facts are: ${JSON.stringify(pkg.sampleRequest)}`
   );
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
-  const digits = String(Math.trunc(expected));
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_runtime_package"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    {
-      name: "reports the computed value",
-      ok: run.text.includes(digits),
-      detail: `expected the answer to contain ${digits}`
-    }
+    valueCheck(run.text, expected)
   ]);
 }
 
@@ -255,8 +274,7 @@ async function traceCase(): Promise<CaseResult> {
  * household lacks. One leaf fact is removed from the package's own sample
  * request, so the field the model must name is known exactly.
  */
-async function missingInputsCase(): Promise<CaseResult> {
-  const name = "find_missing_household_inputs";
+async function missingInputsCase(name: string): Promise<CaseResult> {
   const pkg = await firstPackageWithSample();
   if (!pkg.ok) return skipped(name, pkg.reason);
 
@@ -268,13 +286,13 @@ async function missingInputsCase(): Promise<CaseResult> {
     { program_id: pkg.programId, jurisdiction: pkg.jurisdiction },
     `My household facts are: ${JSON.stringify(removed.request)}`
   );
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_runtime_package"),
     {
       name: "names the withheld fact",
-      ok: run.text.includes(removed.field),
+      ok: namesField(run.text, removed.field),
       detail: `expected the answer to name "${removed.field}"`
     }
   ]);
@@ -284,8 +302,7 @@ async function missingInputsCase(): Promise<CaseResult> {
  * Root mode. Same shape as the trace case: discover a subtree, compute its
  * output directly, then require the model to reach it from the prompt.
  */
-async function subtreeCase(): Promise<CaseResult> {
-  const name = "run_corpus_subtree";
+async function subtreeCase(name: string): Promise<CaseResult> {
   const subtrees = await callTool("list_corpus_subtrees", {});
   const root = firstSubtreeRoot(subtrees);
   if (!root) return skipped(name, "list_corpus_subtrees returned no root");
@@ -298,26 +315,18 @@ async function subtreeCase(): Promise<CaseResult> {
     root,
     facts: facts.facts
   });
-  const expected = firstNumericValue(direct);
-  if (expected === undefined || expected === 0) {
-    return skipped(
-      name,
-      `${root} produced no nonzero numeric output to check against`
-    );
+  const expected = checkableValue(firstNumericValue(direct));
+  if (!expected.ok) {
+    return skipped(name, `${root} ${expected.reason}`);
   }
 
   const run = await runPrompt(name, { root }, `My facts are: ${JSON.stringify(facts.facts)}`);
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
-  const digits = String(Math.trunc(expected));
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_root_inputs"),
     toolCheck(run.toolsCalled, "calculate_household"),
-    {
-      name: "reports the computed value",
-      ok: run.text.includes(digits),
-      detail: `expected the answer to contain ${digits}`
-    }
+    valueCheck(run.text, expected.value)
   ]);
 }
 
@@ -359,38 +368,121 @@ type PackageFixture =
       programId: string;
       jurisdiction: string;
       sampleRequest: Record<string, unknown>;
+      /** What the sample computes, when the search was asked to check. */
+      computed?: number;
     }
   | { ok: false; reason: string };
-
-let packageFixture: PackageFixture | undefined;
 
 /**
  * The first runtime package that publishes a sample request. Discovered
  * rather than hard-coded, so the eval follows what the API actually serves.
  */
 async function firstPackageWithSample(): Promise<PackageFixture> {
-  if (packageFixture) return packageFixture;
+  anyPackage = anyPackage ?? (await findPackage(false));
+  return anyPackage;
+}
+
+/**
+ * A package whose sample request computes something an answer can be checked
+ * against. `trace_household_result` needs one: it asks the model to report
+ * the number the API returned, and a package that computes 0 — or 9 — gives
+ * a check any answer passes. `find_missing_household_inputs` does not care
+ * what the sample computes, so it takes the first package that fits, and the
+ * two keep separate caches.
+ */
+async function firstComputablePackage(): Promise<PackageFixture> {
+  computablePackage = computablePackage ?? (await findPackage(true));
+  return computablePackage;
+}
+
+/**
+ * Walks the published packages for one the eval can use.
+ *
+ * The search is bounded. Each candidate costs a `get_runtime_package`, and a
+ * checked one costs a `calculate_household` as well; these are direct API
+ * calls rather than model calls, but a catalogue of hundreds would still
+ * make a run crawl.
+ */
+async function findPackage(requireValue: boolean): Promise<PackageFixture> {
   const listed = await callTool("list_runtime_packages", {});
   const rows = collectObjects(listed, "packages");
+  const tooLarge: string[] = [];
+  const unusableValue: string[] = [];
+  let examined = 0;
+
   for (const row of rows) {
     const programId = asString(row.program_id ?? row.id);
     const jurisdiction = asString(row.jurisdiction);
     if (!programId || !jurisdiction) continue;
+    if (examined >= MAX_PACKAGES_EXAMINED) break;
+    examined += 1;
+
     const detail = await callTool("get_runtime_package", {
       jurisdiction,
       program_id: programId
     });
     const sample = findObject(detail, "sample_request");
-    if (sample) {
-      packageFixture = { ok: true, programId, jurisdiction, sampleRequest: sample };
-      return packageFixture;
+    if (!sample) continue;
+
+    // Measured here, before the model is called. us-ny/snap answers with
+    // about 59 KB, and the CLI files a result that size away and replies
+    // with a path the model has no tool to open. Paying for a run whose
+    // fixture cannot reach the model buys nothing, so look for one that fits.
+    const size = JSON.stringify(detail).length;
+    if (size > MAX_FIXTURE_CHARACTERS) {
+      tooLarge.push(`${jurisdiction}/${programId} (${size} characters)`);
+      continue;
     }
+
+    if (!requireValue) {
+      return { ok: true, programId, jurisdiction, sampleRequest: sample };
+    }
+
+    const computed = checkableValue(
+      firstNumericValue(await callTool("calculate_household", sample))
+    );
+    if (!computed.ok) {
+      unusableValue.push(`${jurisdiction}/${programId} ${computed.reason}`);
+      continue;
+    }
+    return {
+      ok: true,
+      programId,
+      jurisdiction,
+      sampleRequest: sample,
+      computed: computed.value
+    };
   }
-  packageFixture = {
-    ok: false,
-    reason: "no runtime package published a sample_request"
+
+  return { ok: false, reason: searchFailure(tooLarge, unusableValue, examined) };
+}
+
+function searchFailure(
+  tooLarge: string[],
+  unusableValue: string[],
+  examined: number
+): string {
+  const reasons: string[] = [];
+  if (tooLarge.length > 0) {
+    reasons.push(`too large for the model to read: ${tooLarge.join(", ")}`);
+  }
+  if (unusableValue.length > 0) {
+    reasons.push(`nothing checkable computed: ${unusableValue.join("; ")}`);
+  }
+  if (reasons.length === 0) {
+    return `no runtime package published a sample_request in the first ${examined} examined`;
+  }
+  return `no usable package in the first ${examined} examined — ${reasons.join("; ")}`;
+}
+
+/** Requires the answer to report the number the API computed. */
+function valueCheck(text: string, expected: number): Check {
+  const digits = String(Math.trunc(Math.abs(expected)));
+  return {
+    name: "reports the computed value",
+    ok: reportsNumber(text, expected),
+    detail: `expected the answer to report ${digits} as its own number`
   };
-  return packageFixture;
 }
 
 function toolCheck(called: Set<string>, tool: string): Check {
@@ -406,6 +498,7 @@ function graded(prompt: string, run: RunOutcome, checks: Check[]): CaseResult {
     prompt,
     status: checks.every((check) => check.ok) ? "pass" : "fail",
     checks,
+    answer: run.text,
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
     iterations: run.iterations,
@@ -413,29 +506,49 @@ function graded(prompt: string, run: RunOutcome, checks: Check[]): CaseResult {
   };
 }
 
-function failed(prompt: string, reason: string, run: RunOutcome): CaseResult {
-  return {
-    prompt,
-    status: "fail",
-    checks: [],
-    reason,
-    inputTokens: run.inputTokens,
-    outputTokens: run.outputTokens,
-    iterations: run.iterations,
-    costUsd: run.costUsd
-  };
+/**
+ * Runs one case, and turns a thrown setup failure into a skip.
+ *
+ * Only the harness throws here: a tool call the API refuses, or a prompt
+ * the server will not render. Letting it escape ends the whole run, which
+ * loses every case already graded and the model calls they cost. One
+ * endpoint answering 503 must not erase three results.
+ */
+async function runCase(
+  name: string,
+  build: CaseBuilder
+): Promise<CaseResult> {
+  try {
+    return await build(name);
+  } catch (error) {
+    return skipped(
+      name,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
 }
 
-function skipped(prompt: string, reason: string): CaseResult {
+/**
+ * A case that produced no verdict, and what it cost to find that out.
+ *
+ * `run` is given when the model had already been called — a harness fault
+ * reached after the tokens were spent. Leaving it off would hide that spend
+ * from the report, which is the one place the bill is stated.
+ */
+function skipped(
+  prompt: string,
+  reason: string,
+  run?: RunOutcome
+): CaseResult {
   return {
     prompt,
     status: "skipped",
     checks: [],
     reason,
-    inputTokens: 0,
-    outputTokens: 0,
-    iterations: 0,
-    costUsd: 0
+    inputTokens: run?.inputTokens ?? 0,
+    outputTokens: run?.outputTokens ?? 0,
+    iterations: run?.iterations ?? 0,
+    costUsd: run?.costUsd ?? 0
   };
 }
 
@@ -456,6 +569,15 @@ function report(): void {
     for (const check of result.checks) {
       console.log(`     ${check.ok ? "ok" : "no"} ${check.name} — ${check.detail}`);
     }
+    // Only under a failure. A check matches on text, so the answer is the
+    // only way to tell a prompt that did not comply from a check too
+    // literal to see that it did.
+    if (result.status === "fail" && result.answer) {
+      console.log("     the model answered:");
+      for (const line of answerExcerpt(result.answer).split("\n")) {
+        console.log(`       ${line}`);
+      }
+    }
   }
 
   console.log(
@@ -475,6 +597,14 @@ function report(): void {
   if (skippedCases.length > 0) {
     console.log(
       `\n${skippedCases.length} case(s) found no live fixture and were not graded. A skip is not a pass.`
+    );
+  }
+
+  const graded = results.filter((result) => result.status !== "skipped");
+  if (graded.length === 0) {
+    throw new Error(
+      "prompt eval graded nothing: every case was skipped, so this run says " +
+        "nothing about any prompt"
     );
   }
 
