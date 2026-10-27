@@ -210,7 +210,7 @@ async function variableCase(name: string): Promise<CaseResult> {
     { variable: example.variable, jurisdiction },
     `My facts are: ${JSON.stringify(facts)}`
   );
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
   const checks: Check[] = [
     toolCheck(run.toolsCalled, "list_variables"),
@@ -250,7 +250,7 @@ async function traceCase(name: string): Promise<CaseResult> {
     { program_id: pkg.programId, jurisdiction: pkg.jurisdiction },
     `My household facts are: ${JSON.stringify(pkg.sampleRequest)}`
   );
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_runtime_package"),
@@ -276,7 +276,7 @@ async function missingInputsCase(name: string): Promise<CaseResult> {
     { program_id: pkg.programId, jurisdiction: pkg.jurisdiction },
     `My household facts are: ${JSON.stringify(removed.request)}`
   );
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_runtime_package"),
@@ -311,7 +311,7 @@ async function subtreeCase(name: string): Promise<CaseResult> {
   }
 
   const run = await runPrompt(name, { root }, `My facts are: ${JSON.stringify(facts.facts)}`);
-  if (!run.ok) return failed(name, run.reason, run);
+  if (!run.ok) return skipped(name, run.reason, run);
 
   return graded(name, run, [
     toolCheck(run.toolsCalled, "get_root_inputs"),
@@ -421,19 +421,6 @@ function graded(prompt: string, run: RunOutcome, checks: Check[]): CaseResult {
   };
 }
 
-function failed(prompt: string, reason: string, run: RunOutcome): CaseResult {
-  return {
-    prompt,
-    status: "fail",
-    checks: [],
-    reason,
-    inputTokens: run.inputTokens,
-    outputTokens: run.outputTokens,
-    iterations: run.iterations,
-    costUsd: run.costUsd
-  };
-}
-
 /**
  * Runs one case, and turns a thrown setup failure into a skip.
  *
@@ -456,16 +443,27 @@ async function runCase(
   }
 }
 
-function skipped(prompt: string, reason: string): CaseResult {
+/**
+ * A case that produced no verdict, and what it cost to find that out.
+ *
+ * `run` is given when the model had already been called — a harness fault
+ * reached after the tokens were spent. Leaving it off would hide that spend
+ * from the report, which is the one place the bill is stated.
+ */
+function skipped(
+  prompt: string,
+  reason: string,
+  run?: RunOutcome
+): CaseResult {
   return {
     prompt,
     status: "skipped",
     checks: [],
     reason,
-    inputTokens: 0,
-    outputTokens: 0,
-    iterations: 0,
-    costUsd: 0
+    inputTokens: run?.inputTokens ?? 0,
+    outputTokens: run?.outputTokens ?? 0,
+    iterations: run?.iterations ?? 0,
+    costUsd: run?.costUsd ?? 0
   };
 }
 
@@ -514,6 +512,14 @@ function report(): void {
   if (skippedCases.length > 0) {
     console.log(
       `\n${skippedCases.length} case(s) found no live fixture and were not graded. A skip is not a pass.`
+    );
+  }
+
+  const graded = results.filter((result) => result.status !== "skipped");
+  if (graded.length === 0) {
+    throw new Error(
+      "prompt eval graded nothing: every case was skipped, so this run says " +
+        "nothing about any prompt"
     );
   }
 

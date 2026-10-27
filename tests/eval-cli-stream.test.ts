@@ -176,6 +176,56 @@ describe("parseCliStream", () => {
     expect(run.text).toBe("");
   });
 
+  // The CLI's own reply when a result is too big to hand over. It advises
+  // grepping the file or slicing it with Bash — which this run cannot do, and
+  // which is where the stray `Bash` in one report came from.
+  it("faults when a tool result was written to a file", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        toolResult(
+          "Error: result (60,462 characters across 1 line) exceeds maximum " +
+            "allowed tokens. Output has been saved to /tmp/tool-results/x.txt.\n" +
+            "- For targeted searches (find a string): use grep on the file."
+        ),
+        result({ result: "I could not read the package." })
+      ])
+    );
+
+    expect(run.ok).toBe(false);
+    expect(run.reason).toContain("60,462 characters");
+    expect(run.reason).toContain("written to a file");
+    expect(run.text).toBe("");
+  });
+
+  it("still reports what a spilled run called and spent", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        toolResult("Error: result (99 characters) exceeds maximum allowed tokens."),
+        result({})
+      ])
+    );
+
+    expect([...run.toolsCalled]).toEqual(["get_runtime_package"]);
+    expect(run.inputTokens).toBe(32085);
+  });
+
+  it("leaves an ordinary tool result alone", () => {
+    const run = parseCliStream(
+      stream([
+        init(),
+        assistantToolUse("mcp__axiom__get_runtime_package"),
+        toolResult('{"program_id":"us-ny/snap"}'),
+        result({ result: "The package is us-ny/snap." })
+      ])
+    );
+
+    expect(run.ok).toBe(true);
+  });
+
   it("accepts a run offered only the server's own tools", () => {
     const run = parseCliStream(
       stream([init(), result({ result: "SNAP comes to 291 dollars." })])
@@ -184,6 +234,15 @@ describe("parseCliStream", () => {
     expect(run.ok).toBe(true);
   });
 });
+
+function toolResult(content: string): unknown {
+  return {
+    type: "user",
+    message: {
+      content: [{ type: "tool_result", tool_use_id: "toolu_1", content }]
+    }
+  };
+}
 
 function stream(events: unknown[]): string[] {
   return events.map((event) => JSON.stringify(event));

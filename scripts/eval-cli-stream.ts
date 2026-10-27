@@ -33,6 +33,7 @@ export function parseCliStream(lines: readonly string[]): CliRun {
   let result: Record<string, unknown> | undefined;
   let unconnected: string[] = [];
   let foreignTools: string[] = [];
+  let spilled: string | undefined;
   let cliVersion = "";
   let sawInit = false;
 
@@ -45,6 +46,8 @@ export function parseCliStream(lines: readonly string[]): CliRun {
       cliVersion = asString(event.claude_code_version) ?? "";
     } else if (type === "assistant") {
       for (const name of toolNamesIn(event)) toolsCalled.add(name);
+    } else if (type === "user") {
+      spilled = spilled ?? spilledToolResult(event);
     } else if (type === "result") {
       result = event;
     }
@@ -89,6 +92,15 @@ export function parseCliStream(lines: readonly string[]): CliRun {
         `${MCP_SERVER_NAME} tools, so the run was not isolated`,
       totals
     );
+  }
+  // A tool result the CLI would not hand over. Past its ceiling it writes
+  // the result to a file and replies with the path, advising the model to
+  // grep or slice it — advice this run cannot take, because it is given
+  // the Axiom tools and nothing else. The model then answers without its
+  // fixture, and a check that looks into that fixture fails for a reason
+  // that has nothing to do with the prompt.
+  if (spilled) {
+    return fault(spilled, totals);
   }
   const denied = deniedTools(result);
   if (denied.length > 0) {
@@ -174,6 +186,30 @@ function serversNotConnected(event: Record<string, unknown>): string[] {
     .map((entry) => asRecord(entry))
     .filter((entry) => asString(entry?.status) !== "connected")
     .map((entry) => asString(entry?.name) ?? "unnamed");
+}
+
+/**
+ * The CLI's own words when it files a result away instead of answering
+ * it: `Error: result (60,462 characters across 1 line) exceeds maximum
+ * allowed tokens. Output has been saved to ...`.
+ */
+function spilledToolResult(
+  event: Record<string, unknown>
+): string | undefined {
+  const content = asRecord(event.message)?.content;
+  if (!Array.isArray(content)) return undefined;
+  for (const block of content) {
+    const text = asString(asRecord(block)?.content);
+    if (!text) continue;
+    if (!text.includes("exceeds maximum allowed tokens")) continue;
+    const size = /result \(([\d,]+) characters/.exec(text)?.[1];
+    return (
+      `a tool result${size ? ` of ${size} characters` : ""} was written ` +
+      "to a file instead of answered to the model, which has no tool " +
+      "that can open it"
+    );
+  }
+  return undefined;
 }
 
 /** Tools the CLI offered that did not come from the Axiom server. */
