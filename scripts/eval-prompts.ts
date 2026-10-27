@@ -11,6 +11,7 @@ import {
   asString,
   collectObjects,
   findObject,
+  answerExcerpt,
   checkableValue,
   firstNumericValue,
   firstSubtreeRoot,
@@ -68,6 +69,8 @@ interface CaseResult {
   readonly status: "pass" | "fail" | "skipped";
   readonly checks: Check[];
   readonly reason?: string;
+  /** What the model answered, kept so a failure can be read. */
+  readonly answer?: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly iterations: number;
@@ -409,6 +412,7 @@ function graded(prompt: string, run: RunOutcome, checks: Check[]): CaseResult {
     prompt,
     status: checks.every((check) => check.ok) ? "pass" : "fail",
     checks,
+    answer: run.text,
     inputTokens: run.inputTokens,
     outputTokens: run.outputTokens,
     iterations: run.iterations,
@@ -480,6 +484,15 @@ function report(): void {
     if (result.reason) console.log(`     ${result.reason}`);
     for (const check of result.checks) {
       console.log(`     ${check.ok ? "ok" : "no"} ${check.name} — ${check.detail}`);
+    }
+    // Only under a failure. A check matches on text, so the answer is the
+    // only way to tell a prompt that did not comply from a check too
+    // literal to see that it did.
+    if (result.status === "fail" && result.answer) {
+      console.log("     the model answered:");
+      for (const line of answerExcerpt(result.answer).split("\n")) {
+        console.log(`       ${line}`);
+      }
     }
   }
 

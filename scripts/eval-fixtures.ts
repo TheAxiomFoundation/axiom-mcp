@@ -187,3 +187,23 @@ export function reportsNumber(text: string, expected: number): boolean {
   const normalized = text.replace(/(?<=\d)[,_](?=\d)/g, "");
   return new RegExp(`(?<![\\d.])${digits}(?![\\d])`).test(normalized);
 }
+
+/** How much of an answer the report prints under a failed case. */
+export const ANSWER_EXCERPT_LIMIT = 1500;
+
+/**
+ * The part of an answer a reader needs to judge a failed check.
+ *
+ * Every check matches on text, so a failure has two readings: the model did
+ * not do the thing, or it did it in words the check does not match. Only the
+ * answer itself separates them, and a run costs too much to repeat blind.
+ */
+export function answerExcerpt(
+  text: string,
+  limit: number = ANSWER_EXCERPT_LIMIT
+): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= limit) return trimmed;
+  const cut = trimmed.length - limit;
+  return `${trimmed.slice(0, limit)}… (${cut} more characters)`;
+}

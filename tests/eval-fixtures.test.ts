@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANSWER_EXCERPT_LIMIT,
+  answerExcerpt,
   checkableValue,
   firstNumericValue,
   firstSubtreeRoot,
@@ -192,5 +194,35 @@ describe("reportsNumber", () => {
 
   it("rejects an answer with no number at all", () => {
     expect(reportsNumber("I could not compute that.", 339)).toBe(false);
+  });
+});
+
+describe("answerExcerpt", () => {
+  // A failed check says the text did not match. Only the text itself says
+  // whether the model failed the task or merely worded it differently.
+  it("returns a short answer whole", () => {
+    expect(answerExcerpt("You receive $339 per month.")).toBe(
+      "You receive $339 per month."
+    );
+  });
+
+  it("drops surrounding whitespace", () => {
+    expect(answerExcerpt("\n  the answer  \n")).toBe("the answer");
+  });
+
+  it("keeps the line breaks inside the answer", () => {
+    expect(answerExcerpt("first line\nsecond line")).toBe(
+      "first line\nsecond line"
+    );
+  });
+
+  it("cuts a long answer and says how much it cut", () => {
+    const excerpt = answerExcerpt("x".repeat(ANSWER_EXCERPT_LIMIT + 40));
+    expect(excerpt).toContain("(40 more characters)");
+    expect(excerpt.startsWith("x".repeat(ANSWER_EXCERPT_LIMIT))).toBe(true);
+  });
+
+  it("takes a shorter limit", () => {
+    expect(answerExcerpt("abcdef", 3)).toBe("abc… (3 more characters)");
   });
 });
