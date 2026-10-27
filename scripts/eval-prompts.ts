@@ -13,6 +13,7 @@ import {
   findObject,
   answerExcerpt,
   checkableValue,
+  namesField,
   firstNumericValue,
   firstSubtreeRoot,
   removeOneLeaf,
@@ -219,7 +220,7 @@ async function variableCase(name: string): Promise<CaseResult> {
   if (ignored.length > 0) {
     checks.push({
       name: "reports the ignored facts",
-      ok: ignored.some((field) => run.text.includes(field)),
+      ok: ignored.some((field) => namesField(run.text, field)),
       detail: `the API ignored ${ignored.join(", ")}; expected the answer to name at least one`
     });
   }
@@ -281,7 +282,7 @@ async function missingInputsCase(name: string): Promise<CaseResult> {
     toolCheck(run.toolsCalled, "get_runtime_package"),
     {
       name: "names the withheld fact",
-      ok: run.text.includes(removed.field),
+      ok: namesField(run.text, removed.field),
       detail: `expected the answer to name "${removed.field}"`
     }
   ]);

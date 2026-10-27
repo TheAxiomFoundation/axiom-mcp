@@ -187,9 +187,18 @@ async function runClaude(
  * ANTHROPIC_API_KEY is removed on purpose. The CLI switches to API billing
  * when it sees one, and this driver exists to run on the CLI's own login. Use
  * the sdk driver to spend an API key deliberately.
+ *
+ * The output ceiling is raised for a second reason. A runtime package runs to
+ * tens of kilobytes, and past the ceiling the CLI writes the result to a file
+ * and hands the model the path. This driver gives the model the Axiom tools
+ * and nothing else, so it has no way to open that file: it answered one case
+ * with `returned about 60 KB, which went to a file I had no way to open`, and
+ * the eval scored a starved model as a failed prompt.
  */
 function childEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
+  env.MAX_MCP_OUTPUT_TOKENS =
+    process.env.MAX_MCP_OUTPUT_TOKENS || "50000";
   return env;
 }

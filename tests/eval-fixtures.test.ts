@@ -3,6 +3,7 @@ import {
   ANSWER_EXCERPT_LIMIT,
   answerExcerpt,
   checkableValue,
+  namesField,
   firstNumericValue,
   firstSubtreeRoot,
   removeOneLeaf,
@@ -224,5 +225,61 @@ describe("answerExcerpt", () => {
 
   it("takes a shorter limit", () => {
     expect(answerExcerpt("abcdef", 3)).toBe("abc… (3 more characters)");
+  });
+});
+
+describe("namesField", () => {
+  // The answer that drove this. The eval scored it a failure for writing
+  // "Maria's age" where the check wanted "people.maria.age", and the prompt
+  // had asked for an answer a person could read.
+  const realAnswer =
+    "**Facts that didn't count (`ignored_inputs`):** **Maria's age (34)** " +
+    "and **Leo's age (6)** were ignored. The Colorado SNAP package doesn't " +
+    "take a person's age as an input.";
+
+  it("accepts the field written for a person", () => {
+    expect(namesField(realAnswer, "people.maria.age")).toBe(true);
+  });
+
+  it("accepts the path itself, for an answer that quotes it", () => {
+    expect(namesField("ignored: people.maria.age", "people.maria.age")).toBe(
+      true
+    );
+  });
+
+  // "age" lives inside "percentage". Without a word boundary the check would
+  // read an unrelated sentence as naming the field.
+  it("does not find a part inside a longer word", () => {
+    expect(
+      namesField("Maria's coverage percentage was applied.", "people.maria.age")
+    ).toBe(false);
+  });
+
+  it("refuses an answer that names a different entity", () => {
+    expect(namesField("Leo's age (6) was ignored.", "people.maria.age")).toBe(
+      false
+    );
+  });
+
+  it("refuses an answer that names neither part", () => {
+    expect(namesField("Everything you gave me counted.", "people.maria.age")).toBe(
+      false
+    );
+  });
+
+  it("reads a snake_case leaf written as words", () => {
+    expect(
+      namesField(
+        "You did not say whether all household members are experiencing homelessness.",
+        "all_household_members_experiencing_homelessness"
+      )
+    ).toBe(true);
+  });
+
+  it("keeps both parts of a two-segment path", () => {
+    expect(namesField("Your income was ignored.", "household.income")).toBe(false);
+    expect(
+      namesField("The household income was ignored.", "household.income")
+    ).toBe(true);
   });
 });

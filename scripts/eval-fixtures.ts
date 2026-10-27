@@ -207,3 +207,38 @@ export function answerExcerpt(
   const cut = trimmed.length - limit;
   return `${trimmed.slice(0, limit)}… (${cut} more characters)`;
 }
+
+/**
+ * Does the answer name this input field?
+ *
+ * A field arrives as a path, `people.maria.age`, and a good answer says
+ * "Maria's age (34) was ignored". Requiring the path would fail every answer
+ * worth having, so the test is the words that identify the field.
+ *
+ * The group segment is dropped, because no plain answer repeats it, and a
+ * snake_case leaf is split, because an answer writes it as prose and puts
+ * its own words in between: "all household members **are** experiencing
+ * homelessness". Order is not required for the same reason. What remains is
+ * specific enough — prose that holds every word of a field by accident is
+ * prose about that field.
+ */
+export function namesField(text: string, field: string): boolean {
+  if (text.includes(field)) return true;
+  const words = identifyingWords(field);
+  if (words.length === 0) return false;
+  return words.every((word) => wordIn(text, word));
+}
+
+function identifyingWords(field: string): string[] {
+  const segments = field.split(".").filter((segment) => segment.length > 0);
+  const kept = segments.length > 2 ? segments.slice(1) : segments;
+  return kept
+    .flatMap((segment) => segment.split("_"))
+    .filter((word) => word.length > 0);
+}
+
+/** The word on its own, in whatever case the answer wrote it. */
+function wordIn(text: string, word: string): boolean {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
