@@ -5,9 +5,9 @@ all rule search, retrieval, source lookup, graph traversal, package discovery,
 and calculation execution go through the HTTP API.
 
 **Status: developer preview.** The MCP server and the hosted API it talks to
-are open for evaluation with self-serve trial keys. Interfaces and limits may
-change before general availability; pin versions and expect breaking changes
-between minors.
+are not yet open to self-serve signup; an Axiom administrator issues keys.
+Interfaces and limits may change before general availability; pin versions and
+expect breaking changes between minors.
 
 ## Run
 
@@ -204,6 +204,7 @@ from another engine.
 
 ## Prompts
 
+- `calculate_variable_for_household`
 - `explain_rule_for_caseworker`
 - `trace_household_result`
 - `run_corpus_subtree`
@@ -215,9 +216,16 @@ The server does not expose shell execution, arbitrary network fetch, database
 access, or write/admin operations. It only calls the configured Axiom API base
 URL with the configured API key.
 
-No API key yet? Issue yourself a trial key (14-day expiry, read +
-calculate scopes, no signup): `curl -s -X POST
-https://api.axiom.org/v1/keys/trial`
+No API key yet? Ask an Axiom administrator. The API has a trial-key route
+(14-day expiry, read + calculate scopes), but it is an operator switch, not a
+public one, and it is off on `api.axiom.org` as of 29 October 2026:
+
+```sh
+curl -s -X POST https://api.axiom.org/v1/keys/trial
+# {"status":"error","error":{"code":"minting_disabled", ...}}
+```
+
+A deployment that turns it on answers the same call with a key.
 
 Recommended API key scopes:
 
