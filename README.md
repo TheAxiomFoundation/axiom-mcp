@@ -218,7 +218,7 @@ URL with the configured API key.
 
 No API key yet? Ask an Axiom administrator. The API has a trial-key route
 (14-day expiry, read + calculate scopes), but it is an operator switch, not a
-public one, and it is off on `api.axiom.org` today:
+public one, and it is off on `api.axiom.org` as of 29 October 2026:
 
 ```sh
 curl -s -X POST https://api.axiom.org/v1/keys/trial

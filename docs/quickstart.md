@@ -3,8 +3,8 @@
 This guide connects an MCP client to the Axiom Rule API through the published
 npm package, `@axiom-foundation/mcp`.
 
-Both the package and the hosted API are a **developer preview**: open for
-evaluation, subject to interface and limit changes before general
+Both the package and the hosted API are a **developer preview**: not yet open
+to self-serve signup, and subject to interface and limit changes before general
 availability.
 
 Full reference with tool schemas, recorded examples, and a live console:
@@ -13,14 +13,18 @@ Full reference with tool schemas, recorded examples, and a live console:
 ## Prerequisites
 
 - Node.js `>=20.0.0`
-- An Axiom API key — no key yet? Issue yourself a free trial key (14-day
-  expiry, read + calculate scopes, no signup):
+- An Axiom API key — no key yet? Ask an Axiom administrator. The API has a
+  trial-key route (14-day expiry; `rules:read`, `sources:read`, `graphs:read`
+  and `calculate:run`), but it is an operator switch, not a public one, and it
+  is off on `api.axiom.org` as of 29 October 2026:
 
   ```sh
   curl -s -X POST https://api.axiom.org/v1/keys/trial
+  # {"status":"error","error":{"code":"minting_disabled", ...}}
   ```
 
-  Durable keys are issued by Axiom administrators.
+  A deployment that turns it on answers the same call with a key. Durable keys
+  are issued by Axiom administrators either way.
 - An MCP client such as Claude Desktop, Cursor, or another client that supports
   stdio MCP servers
 
